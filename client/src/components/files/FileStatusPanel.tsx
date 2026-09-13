@@ -47,15 +47,15 @@ function CommitFileRow({ file, isActive, onClick }: {
   return (
     <div
       className={cn(
-        'group flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer',
+        'group flex items-center gap-1.5 px-3 py-1 text-sm cursor-pointer',
         isActive
           ? 'bg-accent-emphasis/20 text-text-primary'
           : 'hover:bg-bg-tertiary/30'
       )}
       onClick={onClick}
     >
-      <span title={label} className="flex-shrink-0"><StatusIcon size={13} className={color} /></span>
-      <span title={typeLabel} className="flex-shrink-0" style={{ color: typeColor }}><TypeIcon size={13} /></span>
+      <span title={label} className="flex-shrink-0"><StatusIcon size={15} className={color} /></span>
+      <span title={typeLabel} className="flex-shrink-0" style={{ color: typeColor }}><TypeIcon size={15} /></span>
       <span className="flex-1 truncate">{file.path}</span>
     </div>
   );
@@ -486,9 +486,9 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   if (selectedCommit && selectedCommit !== '__uncommitted__') {
     return (
       <div className="flex flex-col h-full overflow-hidden border-t border-border">
-        <div className="flex items-center justify-between px-3 py-1.5 bg-bg-secondary text-xs font-medium text-text-secondary flex-shrink-0">
+        <div className="flex items-center justify-between px-3 py-1.5 bg-bg-secondary text-sm font-medium text-text-secondary flex-shrink-0">
           <div className="flex items-center gap-1">
-            <GitCommitHorizontal size={11} className="text-accent" />
+            <GitCommitHorizontal size={13} className="text-accent" />
             Changed Files ({commitFiles.length})
           </div>
         </div>
@@ -498,7 +498,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
               <Loader2 size={16} className="animate-spin" />
             </div>
           ) : commitFiles.length === 0 ? (
-            <div className="flex items-center justify-center py-8 text-text-muted text-xs">
+            <div className="flex items-center justify-center py-8 text-text-muted text-sm">
               No files changed
             </div>
           ) : (
