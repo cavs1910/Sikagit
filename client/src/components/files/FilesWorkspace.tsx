@@ -274,7 +274,7 @@ export function FilesWorkspace({
           />
         </div>
       </aside>
-      <section className={cn("flex-1 min-w-0 flex flex-col overflow-hidden", mobile && treeVisible && "hidden")}>
+      {(!mobile || (!!doc && !treeVisible)) && <section className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="flex border-b border-border bg-bg-secondary min-h-9 shrink-0">
           <button
             title={treeVisible ? "Hide explorer" : "Show explorer"}
@@ -436,7 +436,7 @@ export function FilesWorkspace({
             </div>
           </>
         )}
-      </section>
+      </section>}
     </div>
   );
 }
