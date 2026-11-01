@@ -75,7 +75,7 @@ router.post('/resolve', (req: Request, res: Response) => {
  */
 function getSearchDirs(): string[] {
   const dirs: string[] = [];
-  const home = os.homedir();
+  const home = process.env.PROJECTS_ROOT || '/repos';
   const devDirNames = [
     'projects', 'repos', 'dev', 'code', 'workspace', 'programming',
     'Documents', 'Desktop', 'src', 'git', 'github', 'work',

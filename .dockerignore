@@ -4,3 +4,7 @@ dist
 *.log
 .env.local
 .DS_Store
+data
+secrets
+*.patch
+AUDIT.txt

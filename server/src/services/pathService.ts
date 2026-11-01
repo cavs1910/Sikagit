@@ -1,3 +1,4 @@
+import { confinedRepo } from '../security';
 import path from 'path';
 import fs from 'fs';
 
@@ -18,7 +19,7 @@ export function normalizePath(inputPath: string): string {
     if (normalized.length > 1 && normalized.endsWith('/')) {
       normalized = normalized.slice(0, -1);
     }
-    return normalized;
+    return confinedRepo(normalized);
   }
 
   // Windows-specific normalization below
@@ -105,13 +106,7 @@ export function validateGitRepo(repoPath: string): { valid: boolean; error?: str
   try {
     fs.statSync(gitPath);
   } catch {
-    // No .git found — auto-initialize
-    try {
-      const { execSync } = require('child_process');
-      execSync('git init', { cwd: normalized, stdio: 'ignore' });
-    } catch {
-      return { valid: false, error: 'Directory is not a git repository and could not be initialized' };
-    }
+    return { valid: false, error: 'Directory is not an existing git repository' };
   }
 
   return { valid: true };

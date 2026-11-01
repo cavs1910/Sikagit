@@ -1,5 +1,6 @@
-import simpleGit, { SimpleGit } from 'simple-git';
-import { execSync } from 'child_process';
+import { simpleGit, SimpleGit } from 'simple-git';
+import { execFileSync } from 'child_process';
+import { confinedFile, safeFiles, safeRevision, safeRef, safeRemote } from '../security';
 import { readFileSync, readdirSync, existsSync, statSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import type {
@@ -104,8 +105,8 @@ function readHostGitConfig(key: string): string {
       for (const user of readdirSync(hostHome)) {
         const cfgPath = join(hostHome, user, '.gitconfig');
         if (existsSync(cfgPath)) {
-          const result = execSync(
-            `git config --file '${cfgPath}' '${key}'`,
+          const result = execFileSync(
+            'git', ['config', '--file', cfgPath, key],
             { encoding: 'utf-8' }
           ).trim();
           if (result) return result;
@@ -129,6 +130,7 @@ function getGit(repoPath: string, opts: { network?: boolean } = {}): SimpleGit {
   // Remote-facing commands need the far larger network budget; see NETWORK_TIMEOUT_MS.
   const git = simpleGit(normalized, {
     config: ['core.quotepath=false'],
+    allowEnvironment: ['GIT_TERMINAL_PROMPT'],
     timeout: { block: opts.network ? NETWORK_TIMEOUT_MS : STATUS_TIMEOUT_MS },
   });
 
@@ -498,6 +500,7 @@ export async function getLogWithParents(
  * local branch, creating a tracking branch when one doesn't exist yet.
  */
 export async function switchBranch(repoPath: string, branch: string): Promise<{ branch: string }> {
+  safeRef(branch);
   const git = getGit(repoPath);
 
   if (branch.startsWith('remotes/')) {
@@ -642,6 +645,8 @@ export function parseWhitespaceMode(value: unknown): DiffWhitespaceMode {
  * both always describe exactly the same set of changes.
  */
 function diffScopeArgs(repoPath: string, commitHash?: string, filePath?: string, staged?: boolean): string[] {
+  if (commitHash) safeRevision(commitHash);
+  if (filePath) confinedFile(repoPath, filePath);
   const args: string[] = [];
 
   if (staged) {
@@ -651,7 +656,7 @@ function diffScopeArgs(repoPath: string, commitHash?: string, filePath?: string,
   if (commitHash) {
     // Root commits have no parent, so `commitHash~1` errors out. Detect that
     // case and diff against Git's canonical empty tree instead.
-    const parents = execSync(`git rev-list --parents -n 1 ${commitHash}`, {
+    const parents = execFileSync('git', ['rev-list', '--parents', '-n', '1', commitHash, '--'], {
       cwd: normalizePath(repoPath),
       encoding: 'utf-8',
     }).trim().split(/\s+/);
@@ -767,7 +772,7 @@ export async function getDiffWithMeta(
 function generateUntrackedDiff(repoPath: string, filePath: string): string {
   const normalized = normalizePath(repoPath);
   try {
-    const fullPath = join(normalized, filePath);
+    const fullPath = confinedFile(normalized, filePath);
     const stat = statSync(fullPath);
     if (!stat.isFile()) return '';
 
@@ -802,10 +807,11 @@ function generateUntrackedDiff(repoPath: string, filePath: string): string {
 }
 
 export async function getCommitFiles(repoPath: string, commitHash: string): Promise<{ path: string; status: string }[]> {
+  safeRevision(commitHash);
   const normalized = normalizePath(repoPath);
   // -c core.quotepath=false keeps non-ASCII paths (Arabic, CJK…) as raw UTF-8
   // instead of octal escapes in the --name-status output.
-  const output = execSync(`git -c core.quotepath=false diff-tree --no-commit-id -r --name-status ${commitHash}`, { cwd: normalized, encoding: 'utf-8' }).trim();
+  const output = execFileSync('git', ['-c', 'core.quotepath=false', 'diff-tree', '--no-commit-id', '-r', '--name-status', commitHash, '--'], { cwd: normalized, encoding: 'utf-8' }).trim();
   if (!output) return [];
   return output.split('\n').map(line => {
     const [status, ...pathParts] = line.split('\t');
@@ -824,21 +830,25 @@ export async function getStagedDiff(
 }
 
 export async function stageHunk(repoPath: string, patch: string): Promise<void> {
+  if (/(?:^|[\/])\.git(?:[\/]|$)/m.test(patch)) throw new Error('Git metadata patch rejected');
   const normalized = normalizePath(repoPath);
-  execSync('git apply --cached -', { input: patch, cwd: normalized });
+  execFileSync('git', ['apply', '--cached', '-'], { input: patch, cwd: normalized });
 }
 
 export async function discardHunk(repoPath: string, patch: string): Promise<void> {
+  if (/(?:^|[\/])\.git(?:[\/]|$)/m.test(patch)) throw new Error('Git metadata patch rejected');
   const normalized = normalizePath(repoPath);
-  execSync('git apply --reverse -', { input: patch, cwd: normalized });
+  execFileSync('git', ['apply', '--reverse', '-'], { input: patch, cwd: normalized });
 }
 
 export async function stageFiles(repoPath: string, files: string[]): Promise<void> {
+  safeFiles(repoPath, files);
   const git = getGit(repoPath);
-  await git.add(files);
+  await git.raw(['add', '--', ...files]);
 }
 
 export async function unstageFiles(repoPath: string, files: string[]): Promise<void> {
+  safeFiles(repoPath, files);
   const git = getGit(repoPath);
   if (!(await hasCommits(repoPath))) {
     // No HEAD to reset to. Remove the entries from the index directly; --cached
@@ -873,12 +883,7 @@ export async function commit(repoPath: string, message: string, amend = false): 
   }
 
   const normalized = normalizePath(repoPath);
-  const amendFlag = amend ? ' --amend' : '';
-  const escapedMessage = message.replace(/'/g, "'\\''");
-  const escapedName = author.name.replace(/'/g, "'\\''");
-  const escapedEmail = author.email.replace(/'/g, "'\\''");
-  const cmd = `git -c user.name='${escapedName}' -c user.email='${escapedEmail}' commit -m '${escapedMessage}'${amendFlag}`;
-  const result = execSync(cmd, { cwd: normalized, encoding: 'utf-8' });
+  const result = execFileSync('git', ['-c', `user.name=${author.name}`, '-c', `user.email=${author.email}`, 'commit', '-m', message, ...(amend ? ['--amend'] : [])], { cwd: normalized, encoding: 'utf-8', timeout: 30000 });
   const match = result.match(/\[[\w/.-]+\s+([a-f0-9]+)\]/);
   return match ? match[1] : '';
 }
@@ -896,6 +901,7 @@ export async function mergeBranch(
   repoPath: string,
   sourceBranch: string
 ): Promise<{ message: string; merged: boolean; conflicts?: string[] }> {
+  safeRef(sourceBranch);
   const git = getGit(repoPath);
   const status = await git.status();
   const currentBranch = status.current || 'HEAD';
@@ -926,11 +932,13 @@ export async function abortMerge(repoPath: string): Promise<void> {
 }
 
 export async function deleteBranch(repoPath: string, branchName: string, force = false): Promise<void> {
+  safeRef(branchName);
   const git = getGit(repoPath);
   await git.branch([force ? '-D' : '-d', branchName]);
 }
 
 export async function checkoutCommit(repoPath: string, commitHash: string): Promise<{ branch: string }> {
+  safeRevision(commitHash);
   const git = getGit(repoPath);
   const status = await git.status();
 
@@ -973,41 +981,24 @@ export async function checkoutCommit(repoPath: string, commitHash: string): Prom
     return { branch: targetBranch };
   }
 
-  // No branch at this commit — move the current branch to it
-  let branch = status.current;
-  if (!branch || branch === 'HEAD') {
-    let remoteBranch: string | null = null;
-    try {
-      const remoteInfo = await git.raw(['remote', 'show', 'origin']);
-      const headMatch = remoteInfo.match(/HEAD branch:\s*(\S+)/);
-      if (headMatch) remoteBranch = headMatch[1];
-    } catch { /* no remote configured */ }
-    branch = (remoteBranch && branches.all.find(b => b === remoteBranch))
-      || branches.all[0]
-      || null;
-    if (!branch) {
-      throw new Error('No local branch found to move.');
-    }
-    await git.raw(['branch', '-f', branch, commitHash]);
-    await git.checkout([branch]);
-  } else {
-    await git.reset(['--hard', commitHash]);
-  }
-
-  return { branch };
+  // Inspect historical commits without resetting the current branch or discarding work.
+  await git.raw(['checkout', '--detach', commitHash]);
+  return { branch: 'HEAD' };
 }
 
 export async function discardChanges(repoPath: string, files: string[]): Promise<void> {
+  safeFiles(repoPath, files);
   const git = getGit(repoPath);
   await git.checkout(['--', ...files]);
 }
 
 export async function deleteUntrackedFiles(repoPath: string, files: string[]): Promise<void> {
+  safeFiles(repoPath, files);
   const normalized = normalizePath(repoPath);
   const { unlinkSync } = await import('fs');
   for (const file of files) {
     try {
-      unlinkSync(join(normalized, file));
+      unlinkSync(confinedFile(normalized, file));
     } catch { /* file may already be gone */ }
   }
 }
@@ -1018,6 +1009,8 @@ export async function saveForLater(
   branchName: string,
   message: string
 ): Promise<{ branch: string; commitHash: string }> {
+  safeFiles(repoPath, files);
+  safeRef(branchName);
   const git = getGit(repoPath);
   const normalized = normalizePath(repoPath);
   const status = await git.status();
@@ -1055,18 +1048,14 @@ export async function saveForLater(
 
     // Clear index, then stage only selected files
     await git.reset(['HEAD']);
-    await git.add(files);
+    await git.raw(['add', '--', ...files]);
 
     // Commit using execSync with author identity (matching existing commit() pattern)
     const author = await getAuthorIdentity(repoPath);
     if (!author.name || !author.email) {
       throw new Error('Author identity not configured. Please set Author Name and Email in Repository Settings.');
     }
-    const escapedMessage = message.replace(/'/g, "'\\''");
-    const escapedName = author.name.replace(/'/g, "'\\''");
-    const escapedEmail = author.email.replace(/'/g, "'\\''");
-    const cmd = `git -c user.name='${escapedName}' -c user.email='${escapedEmail}' commit -m '${escapedMessage}'`;
-    const result = execSync(cmd, { cwd: normalized, encoding: 'utf-8' });
+    const result = execFileSync('git', ['-c', `user.name=${author.name}`, '-c', `user.email=${author.email}`, 'commit', '-m', message], { cwd: normalized, encoding: 'utf-8', timeout: 30000 });
     const match = result.match(/\[[\w/.-]+\s+([a-f0-9]+)\]/);
     const commitHash = match ? match[1] : '';
 
@@ -1093,7 +1082,7 @@ export async function saveForLater(
     // Delete untracked files
     for (const file of untrackedFiles) {
       try {
-        unlinkSync(join(normalized, file));
+        unlinkSync(confinedFile(normalized, file));
       } catch { /* file may already be gone */ }
     }
 
@@ -1138,16 +1127,19 @@ export async function getConfig(repoPath: string): Promise<import('@sikagit/shar
 }
 
 export async function setConfig(repoPath: string, key: string, value: string): Promise<void> {
+  if (!['user.name', 'user.email', 'init.defaultBranch'].includes(key)) throw new Error('Configuration key not permitted');
   const git = getGit(repoPath);
   await git.raw(['config', '--local', key, value]);
 }
 
 export async function unsetConfig(repoPath: string, key: string): Promise<void> {
+  if (!['user.name', 'user.email', 'init.defaultBranch'].includes(key)) throw new Error('Configuration key not permitted');
   const git = getGit(repoPath);
   try { await git.raw(['config', '--local', '--unset', key]); } catch { /* already unset */ }
 }
 
 export async function setRemoteUrl(repoPath: string, url: string): Promise<void> {
+  if (url.trim()) safeRemote(url.trim());
   const git = getGit(repoPath);
   if (!url.trim()) {
     // Remove remote if URL is empty
@@ -1164,11 +1156,11 @@ export async function setRemoteUrl(repoPath: string, url: string): Promise<void>
 }
 
 export async function testRemoteConnection(repoPath: string, url?: string): Promise<{ ok: boolean; error?: string }> {
+  if (url) safeRemote(url);
   const normalized = normalizePath(repoPath);
   try {
     // Test URL directly if provided, otherwise test origin
-    const target = url ? `'${url.replace(/'/g, "'\\''")}'` : 'origin';
-    execSync(`git ls-remote ${target}`, { cwd: normalized, encoding: 'utf-8', timeout: 15000, stdio: 'pipe' });
+    execFileSync('git', ['ls-remote', url || 'origin'], { cwd: normalized, encoding: 'utf-8', timeout: 15000, stdio: 'pipe' });
     return { ok: true };
   } catch (err: any) {
     const msg = err.stderr?.trim() || err.message || 'Connection failed';
@@ -1232,13 +1224,10 @@ export async function gitPull(
         if (!author.name || !author.email) {
           throw new Error('Author identity not configured. Please set Author Name and Email in Repository Settings.');
         }
-        const escapedName = author.name.replace(/'/g, "'\\''");
-        const escapedEmail = author.email.replace(/'/g, "'\\''");
-        const cmd = `git -c user.name='${escapedName}' -c user.email='${escapedEmail}' pull ${pullArgs.join(' ')}`;
         // GIT_TERMINAL_PROMPT=0 for the same reason getGit sets it on network
         // instances: this execSync has no timeout at all, so an unanswerable
         // credential prompt would hang the request forever.
-        output = execSync(cmd, {
+        output = execFileSync('git', ['-c', `user.name=${author.name}`, '-c', `user.email=${author.email}`, 'pull', ...pullArgs], {
           cwd: normalized,
           encoding: 'utf-8',
           maxBuffer: 10 * 1024 * 1024,
@@ -1351,12 +1340,14 @@ export async function gitPush(repoPath: string, setUpstream?: boolean, upToCommi
 }
 
 export async function getFileContent(repoPath: string, filePath: string, commitHash?: string): Promise<Buffer> {
+  confinedFile(repoPath, filePath);
+  if (commitHash) safeRevision(commitHash);
   const normalized = normalizePath(repoPath);
   if (commitHash) {
     // Get file content from a specific commit
-    const result = execSync(`git show ${commitHash}:${filePath}`, { cwd: normalized, maxBuffer: 10 * 1024 * 1024 });
+    const result = execFileSync('git', ['show', `${commitHash}:${filePath}`], { cwd: normalized, maxBuffer: 10 * 1024 * 1024 });
     return result;
   }
   // Working tree file
-  return readFileSync(join(normalized, filePath));
+  return readFileSync(confinedFile(normalized, filePath));
 }

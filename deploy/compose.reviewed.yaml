@@ -1,0 +1,36 @@
+services:
+  sikagit:
+    image: local/sikagit:reviewed
+    build:
+      context: ..
+      dockerfile: Dockerfile.reviewed
+    user: "1001:1001"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 160
+    mem_limit: 1g
+    cpus: 2
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=128m,uid=1001,gid=1001
+    volumes:
+      - ${SIKAGIT_STATE_DIR:?Set SIKAGIT_STATE_DIR}/data:/data
+      - ${HOST_REPO_PATH:?Set HOST_REPO_PATH}:/repos/project
+      - ${SIKAGIT_STATE_DIR}/secrets/auth.json:/run/secrets/auth.json:ro
+      - ${SIKAGIT_STATE_DIR}/gitconfig:/etc/gitconfig:ro
+      - ${GH_HOSTS_FILE:?Set GH_HOSTS_FILE}:/run/gh/hosts.yml:ro
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DATA_DIR: /data
+      PROJECTS_ROOT: /repos
+      AUTH_FILE: /run/secrets/auth.json
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN}
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN}
+      GH_CONFIG_DIR: /run/gh
+      GIT_TERMINAL_PROMPT: "0"
+    ports:
+      - "127.0.0.1:8448:3001"
+    restart: unless-stopped

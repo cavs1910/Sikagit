@@ -1,3 +1,4 @@
+import { confinedFile, safeRevision } from '../security';
 import { Router, Request, Response, NextFunction } from 'express';
 import { validateRepoPath } from '../middleware/validatePath';
 import * as gitService from '../services/gitService';
@@ -454,6 +455,7 @@ router.get('/file', asyncHandler(async (req: Request, res: Response) => {
     svg: 'image/svg+xml', webp: 'image/webp', ico: 'image/x-icon', bmp: 'image/bmp',
   };
   const mime = mimeMap[ext] || 'application/octet-stream';
+  res.set('Content-Security-Policy', "default-src 'none'; sandbox");
   res.set('Content-Type', mime);
   res.set('Cache-Control', 'no-cache');
   res.send(content);

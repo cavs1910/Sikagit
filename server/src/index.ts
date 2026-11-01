@@ -1,3 +1,4 @@
+import { accessGuard } from './security';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -7,13 +8,13 @@ import reposRouter from './routes/repos';
 import projectsRouter from './routes/projects';
 import gitRouter from './routes/git';
 import browseRouter from './routes/browse';
-import aiRouter from './routes/ai';
 import { errorHandler } from './middleware/errorHandler';
 
 const PORT = process.env.PORT || 3001;
 
 const app = express();
 const httpServer = createServer(app);
+app.use(accessGuard);
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
   .split(',')
   .map(s => s.trim());
@@ -38,12 +39,14 @@ app.use('/api', (_req, res, next) => {
   next();
 });
 
+io.engine.use(accessGuard as any);
+
 // Routes
 app.use('/api/v1/repos', reposRouter);
 app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/git', gitRouter);
 app.use('/api/v1/browse', browseRouter);
-app.use('/api/v1/ai', aiRouter);
+app.use('/api/v1/ai', (_req, res) => { res.status(403).json({ success: false, error: 'External AI integration disabled on this installation' }); });
 
 // Health check
 app.get('/api/v1/health', (_req, res) => {
@@ -52,7 +55,7 @@ app.get('/api/v1/health', (_req, res) => {
 
 // Serve built client in production
 if (process.env.NODE_ENV === 'production') {
-  const clientDist = path.resolve(__dirname, '../../client/dist');
+  const clientDist = path.resolve('/app/client/dist');
   app.use(express.static(clientDist));
   app.get('*', (_req, res) => {
     res.sendFile(path.join(clientDist, 'index.html'));

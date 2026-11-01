@@ -20,7 +20,7 @@ async function callGemini(apiKey: string, model: string, prompt: string): Promis
     throw new Error(`Gemini API error (${res.status}): ${err}`);
   }
 
-  const data = await res.json();
+  const data: any = await res.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Empty response from Gemini');
   return text;
