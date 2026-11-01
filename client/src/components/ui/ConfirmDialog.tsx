@@ -48,7 +48,7 @@ export function ConfirmDialog() {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60" onClick={handleCancel}>
       <div
-        className="bg-bg-secondary border border-border rounded-lg w-[380px] shadow-xl animate-in fade-in zoom-in-95 duration-150"
+        className="app-dialog overflow-y-auto bg-bg-secondary border border-border rounded-lg w-[380px] shadow-xl animate-in fade-in zoom-in-95 duration-150"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-start gap-3 px-4 pt-4 pb-2">

@@ -133,3 +133,81 @@ body {
   filter: blur(max(5px, 0.45em));
 }
 
+
+/* Keep the application inside the visible viewport as mobile browser chrome
+   and the software keyboard change its height. Desktop panel sizes stay saved. */
+.app-shell {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.app-dialog {
+  max-width: calc(100vw - 1.5rem);
+}
+
+@media (max-width: 767px) {
+  .repo-toolbar {
+    height: auto;
+    min-height: 2.75rem;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+    padding-block: 0.5rem;
+  }
+  .repo-toolbar > * { max-width: 100%; }
+  .repo-toolbar > span { overflow-wrap: anywhere; }
+  .repo-path { display: none; }
+  .repo-toolbar > div:last-child { margin-left: auto; }
+  .commit-list .commit-metadata,
+  .commit-list .cursor-col-resize { display: none; }
+  .staging-panels { flex-direction: column; }
+  .staging-panels > div:first-child {
+    width: 100% !important;
+    flex: 1;
+    min-height: 0;
+  }
+  .staging-panels > .cursor-col-resize { display: none; }
+  .staging-panels > div:last-child { min-height: 0; }
+  .staging-panels > div > div:first-child {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+  .staging-panels .opacity-0 { opacity: 1; }
+  .status-bar { gap: 0.5rem; overflow: hidden; }
+  .status-bar > div, .status-bar span { min-width: 0; }
+  .status-bar > div:first-child { max-width: 40%; }
+  .status-bar > div:first-child span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-bar > span:last-child { display: none; }
+  .app-dialog { max-height: 90dvh; }
+  .settings-layout { flex-direction: column; }
+  .settings-layout > div:first-child {
+    width: 100%;
+    display: flex;
+    overflow-x: auto;
+    flex-shrink: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .settings-layout > div:first-child button { width: auto; flex-shrink: 0; }
+  .app-dialog input:not([type='checkbox']):not([type='radio']),
+  .app-dialog textarea, .app-dialog select { font-size: 16px; }
+}
+
+@media (pointer: coarse) {
+  button { min-height: 36px; }
+  input[type='checkbox'] { min-width: 18px; min-height: 18px; }
+}
+@media (max-width: 767px) {
+  .branch-menu {
+    position: fixed;
+    left: 0.75rem;
+    right: 0.75rem;
+    top: auto;
+    width: auto;
+    max-height: 50dvh;
+  }
+}
+@media (max-width: 767px) {
+  .shelve-layout { flex-direction: column; overflow-y: auto; }
+  .shelve-layout > div:first-child { flex: none; overflow: visible; border-right: 0; }
+  .shelve-layout > div:last-child { width: 100%; min-height: 6rem; overflow: visible; }
+  .shelve-layout > div:last-child > div:last-child { overflow: visible; }
+  .app-dialog .grid-cols-2 { grid-template-columns: minmax(0, 1fr); }
+}

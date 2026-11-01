@@ -23,7 +23,7 @@ export function StatusBar() {
   }
 
   return (
-    <div className="h-6 bg-bg-secondary border-t border-border flex items-center px-3 text-xs text-text-secondary gap-4">
+    <div className="status-bar shrink-0 h-6 bg-bg-secondary border-t border-border flex items-center px-3 text-xs text-text-secondary gap-4">
       {status && (
         <>
           <div className="flex items-center gap-1">

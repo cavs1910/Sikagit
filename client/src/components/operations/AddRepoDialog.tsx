@@ -105,7 +105,7 @@ export function AddRepoDialog({ onClose }: AddRepoDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="bg-bg-secondary border border-border rounded-lg w-[480px] shadow-xl max-h-[85vh] flex flex-col"
+        className="app-dialog bg-bg-secondary border border-border rounded-lg w-[480px] shadow-xl max-h-[85vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}

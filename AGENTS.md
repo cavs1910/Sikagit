@@ -26,6 +26,8 @@ Este archivo permite trabajar sin el chat original. Leelo antes de cambiar el pr
 - Modelos: selector con búsqueda, precios separados de entrada/salida en USD por millón de tokens, caché y fallback incluido. OpenRouter usa su API pública; los otros proveedores, models.dev. Precio desconocido no significa gratis. Mantener el ID manual avanzado para modelos privados.
 - Editor: pestaña **Files**, CodeMirror 6 y lenguajes cargados bajo demanda. Edita archivos existentes UTF-8 de hasta 1 MiB, conserva borradores en memoria y detecta cambios externos. Guardar no hace stage/commit. Ver `docs/FILE_EDITOR.md`.
 
+- Mobile: debajo de 768 px usa menú de repositorios y vistas separadas de historial/cambios/detalle. El editor pliega el explorador y los diálogos se adaptan al viewport. Ver `docs/MOBILE_LAYOUT.md`.
+
 ## Límites de seguridad que deben conservarse
 
 Leé `docs/SECURITY_REVIEW.md` antes de cambiar Git, autenticación, rutas o Docker. Ese informe describe una base histórica; las funciones posteriores tienen su propia documentación y pruebas.

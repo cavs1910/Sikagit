@@ -82,20 +82,20 @@ export function CommitList({ repoPath, onBranchAction }: CommitListProps) {
   const uncommittedOffset = hasUncommitted ? ROW_HEIGHT : 0;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="commit-list flex-1 min-w-0 flex flex-col overflow-hidden">
       {/* Header */}
       <div className="h-7 bg-bg-secondary border-b border-border flex items-center px-3 text-xs text-text-muted font-medium flex-shrink-0">
         <span style={{ width: graphWidth }} className="flex-shrink-0">Graph</span>
         <ColumnResizeHandle onResize={delta => setColGraphWidth((colGraphWidth ?? autoGraphWidth) + delta)} />
         <span className="flex-1 ml-2">Description</span>
         <ColumnResizeHandle onResize={delta => setColTypeWidth(colTypeWidth - delta)} />
-        <span style={{ width: colTypeWidth }} className="flex-shrink-0 pl-1">Type</span>
+        <span style={{ width: colTypeWidth }} className="commit-metadata flex-shrink-0 pl-1">Type</span>
         <ColumnResizeHandle onResize={delta => setColAuthorWidth(colAuthorWidth - delta)} />
-        <span style={{ width: colAuthorWidth }} className="flex-shrink-0 pl-1">Author</span>
+        <span style={{ width: colAuthorWidth }} className="commit-metadata flex-shrink-0 pl-1">Author</span>
         <ColumnResizeHandle onResize={delta => setColDateWidth(colDateWidth - delta)} />
-        <span style={{ width: colDateWidth }} className="flex-shrink-0 pl-1">Date</span>
+        <span style={{ width: colDateWidth }} className="commit-metadata flex-shrink-0 pl-1">Date</span>
         <ColumnResizeHandle onResize={delta => setColHashWidth(colHashWidth - delta)} />
-        <span style={{ width: colHashWidth }} className="flex-shrink-0 pl-1">Hash</span>
+        <span style={{ width: colHashWidth }} className="commit-metadata flex-shrink-0 pl-1">Hash</span>
       </div>
 
       {/* Virtual list */}

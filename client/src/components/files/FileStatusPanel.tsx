@@ -515,7 +515,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   }
 
   return (
-    <div ref={containerRef} className="flex h-full overflow-hidden border-t border-border">
+    <div ref={containerRef} className="staging-panels flex h-full overflow-hidden border-t border-border">
       {/* Unstaged files */}
       <div style={{ width: `${unstagedPanelRatio * 100}%` }} className="flex-shrink-0 flex flex-col overflow-hidden">
         <div

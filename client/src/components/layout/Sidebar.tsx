@@ -596,7 +596,7 @@ function RepoItem({ repo, isActive, onSelect }: {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { repos, activeRepoId, setActiveRepo } = useRepoStore();
   const { projects, activeProjectId, setActiveProject, deleteProject, updateProject } = useProjectStore();
   const loadCached = useRepoStatusStore(s => s.loadCached);
@@ -769,7 +769,7 @@ export function Sidebar() {
                     );
                   }
                 }}
-                onSelectRepo={(id) => { setActiveRepo(id); setActiveProject(project.id); }}
+                onSelectRepo={(id) => { setActiveRepo(id); setActiveProject(project.id); onNavigate?.(); }}
                 onEditProject={() => setProjectDialog({ open: true, project })}
                 onDeleteProject={async () => {
                   const confirmed = await confirm({
@@ -797,7 +797,7 @@ export function Sidebar() {
                 key={repo.id}
                 repo={repo}
                 isActive={activeRepoId === repo.id}
-                onSelect={() => setActiveRepo(repo.id)}
+                onSelect={() => { setActiveRepo(repo.id); onNavigate?.(); }}
               />
             ))}
           </>

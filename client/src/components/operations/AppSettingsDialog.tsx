@@ -120,7 +120,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="bg-bg-secondary border border-border rounded-lg w-[780px] max-w-[96vw] h-[680px] shadow-xl flex flex-col max-h-[90vh]"
+        className="app-dialog bg-bg-secondary border border-border rounded-lg w-[780px] max-w-[96vw] h-[680px] shadow-xl flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -138,7 +138,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
         </div>
 
         {/* Tabs + Content */}
-        <div className="flex flex-1 overflow-hidden min-h-0">
+        <div className="settings-layout flex flex-1 overflow-hidden min-h-0">
           {/* Tab sidebar */}
           <div className="w-36 flex-shrink-0 border-r border-border bg-bg-primary/50 py-2">
             {tabs.map(tab => {

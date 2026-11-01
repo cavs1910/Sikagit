@@ -84,7 +84,7 @@ export function SaveForLaterDialog({ repoPath, files, onClose }: SaveForLaterDia
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="bg-bg-secondary border border-border rounded-lg w-[860px] shadow-xl flex flex-col max-h-[60vh]"
+        className="app-dialog bg-bg-secondary border border-border rounded-lg w-[860px] shadow-xl flex flex-col max-h-[60vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -103,9 +103,9 @@ export function SaveForLaterDialog({ repoPath, files, onClose }: SaveForLaterDia
         </div>
 
         {/* Content — two-column layout */}
-        <div className="flex flex-1 overflow-hidden">
+        <div className="shelve-layout flex flex-1 overflow-hidden min-h-0">
           {/* Left: form fields */}
-          <div className="flex-1 p-4 space-y-3 overflow-y-auto border-r border-border">
+          <div className="min-w-0 flex-1 p-4 space-y-3 overflow-y-auto border-r border-border">
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-xs text-text-secondary font-medium">Branch Name</label>

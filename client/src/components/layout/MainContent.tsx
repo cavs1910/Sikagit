@@ -1,3 +1,4 @@
+import { useMobile } from '../../hooks/useMobile';
 import { lazy, Suspense } from 'react';
 import { useEffect, useCallback, useState } from 'react';
 import { useRepoStore } from '../../store/repoStore';
@@ -25,6 +26,8 @@ import { refreshRepo, whenRepoIdle } from '../../lib/repoRefresh';
 const FilesWorkspace = lazy(() => import('../files/FilesWorkspace').then(module => ({ default: module.FilesWorkspace })));
 
 export function MainContent() {
+  const mobile = useMobile();
+  const [mobileTab, setMobileTab] = useState<'history' | 'changes'>('history');
   const repos = useRepoStore(s => s.repos);
   const activeRepoId = useRepoStore(s => s.activeRepoId);
   const removeRepo = useRepoStore(s => s.removeRepo);
@@ -51,6 +54,7 @@ export function MainContent() {
   // lib/repoRefresh (see repoStore.setActiveRepo and AppShell).
   useEffect(() => {
     // Close the changes panel when switching repos
+    setMobileTab('history');
     selectCommit(null);
     selectFile(null);
 
@@ -263,9 +267,9 @@ export function MainContent() {
   const hasRemote = status?.tracking || status?.remoteUrl;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="group h-10 bg-bg-secondary border-b border-border flex items-center px-3 gap-2">
+      <div className="repo-toolbar group h-10 bg-bg-secondary border-b border-border flex items-center px-3 gap-2">
         {repoProject && (
           <div className="flex items-center gap-1.5">
             {repoProject.avatar ? (
@@ -305,7 +309,7 @@ export function MainContent() {
           </button>
         </div>
         <BranchSwitcher repoPath={repo.path} />
-        <span className="text-xs text-text-secondary flex-1 demo-blur">{repo.displayPath}</span>
+        <span className="repo-path text-xs text-text-secondary flex-1 demo-blur">{repo.displayPath}</span>
 
         {/* Remote actions */}
         {status && hasRemote && (
@@ -416,18 +420,22 @@ export function MainContent() {
         <button role="tab" aria-selected={workspaceTab==='git'} onClick={()=>setWorkspaceTab('git')} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='git'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>History &amp; Changes</button>
         <button role="tab" aria-selected={workspaceTab==='files'} onClick={()=>{setFilesOpened(true);setWorkspaceTab('files');}} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='files'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>Files</button>
       </div>
+      {mobile && workspaceTab === 'git' && <nav className="flex shrink-0 gap-2 p-2 border-b border-border" aria-label="Git views">
+        {(['history', 'changes'] as const).map(tab => <button key={tab} aria-pressed={mobileTab === tab && !selectedCommit && !selectedFile} className={cn('px-3 py-2 rounded text-xs', mobileTab === tab && !selectedCommit && !selectedFile ? 'bg-accent/10 text-accent' : 'bg-bg-secondary text-text-secondary')} onClick={() => { selectCommit(null); selectFile(null); setMobileTab(tab); }}>{tab === 'history' ? 'History' : 'Changes'}</button>)}
+        {(selectedCommit || selectedFile) && <button className="px-3 py-2 text-xs text-accent" onClick={() => { selectCommit(null); selectFile(null); }}>Back to {mobileTab}</button>}
+      </nav>}
       {/* Main area: left column (list + staging) | right column (changes full height) */}
       <div className={cn("flex-1 flex overflow-hidden min-h-0", workspaceTab !== "git" && "hidden")}>
         {/* Left column */}
         <div
-          style={{ width: (selectedCommit || selectedFile) ? commitListWidth : undefined }}
+          style={{ width: !mobile && (selectedCommit || selectedFile) ? commitListWidth : undefined, display: mobile && (selectedCommit || selectedFile) ? 'none' : undefined }}
           className={cn(
             'flex-shrink-0 flex flex-col overflow-hidden',
-            !(selectedCommit || selectedFile) && 'flex-1'
+            (mobile || !(selectedCommit || selectedFile)) && 'flex-1 min-w-0'
           )}
         >
           {/* Commit list */}
-          <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+          <div className={cn("flex-1 flex flex-col overflow-hidden min-h-0", mobile && mobileTab !== 'history' && "hidden")}>
             <CommitList
               repoPath={repo.path}
               onBranchAction={async (branch, action) => {
@@ -482,10 +490,10 @@ export function MainContent() {
           </div>
 
           {/* Resize handle between list and staging */}
-          <ResizeHandle direction="vertical" onResize={handleBottomResize} />
+          {!mobile && <ResizeHandle direction="vertical" onResize={handleBottomResize} />}
 
           {/* Staging panels */}
-          <div style={{ height: bottomPanelHeight }} className="flex-shrink-0 overflow-hidden">
+          <div style={{ height: mobile ? undefined : bottomPanelHeight }} className={cn("flex-shrink-0 overflow-hidden", mobile && (mobileTab === 'changes' ? "flex-1 min-h-0" : "hidden"))}>
             <FileStatusPanel repoPath={repo.path} />
           </div>
         </div>
@@ -493,8 +501,8 @@ export function MainContent() {
         {/* Right column: changes panel full height */}
         {(selectedCommit || selectedFile) && (
           <>
-            <ResizeHandle direction="horizontal" onResize={handleCommitListResize} />
-            <div className="flex-1 flex flex-col overflow-hidden">
+            {!mobile && <ResizeHandle direction="horizontal" onResize={handleCommitListResize} />}
+            <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
               {selectedCommit ? (
                 <CommitDetail repoPath={repo.path} />
               ) : (

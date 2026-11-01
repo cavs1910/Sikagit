@@ -1,3 +1,4 @@
+import { useMobile } from '../../hooks/useMobile';
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   ChevronRight,
@@ -148,6 +149,7 @@ export function FilesWorkspace({
   repoPath: string;
   visible: boolean;
 }) {
+  const mobile = useMobile();
   const { documents, selected, open, reload, save, check, close } =
     useEditorStore();
   const key = selected[repoPath] || "";
@@ -159,6 +161,7 @@ export function FilesWorkspace({
     [refresh, setRefresh] = useState(0),
     [filter, setFilter] = useState(""),
     [showTree, setShowTree] = useState(true);
+  useEffect(() => { if (mobile && key) setShowTree(false); }, [mobile, key]);
   const confirm = useConfirmStore((s) => s.confirm),
     toast = useToastStore((s) => s.addToast);
   const saveCurrent = useCallback(async () => {
@@ -222,12 +225,14 @@ export function FilesWorkspace({
     <div className="flex flex-1 min-h-0 overflow-hidden">
       <aside
         className={cn(
-          "w-56 max-w-[45%] shrink-0 border-r border-border flex-col bg-bg-secondary",
+          "shrink-0 border-r border-border flex-col bg-bg-secondary",
+          mobile ? "w-full" : "w-56 max-w-[45%]",
           showTree ? "flex" : "hidden",
         )}
       >
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <span className="text-xs font-semibold">EXPLORER</span>
+          {mobile && <button aria-label="Close explorer" onClick={() => setShowTree(false)} className="p-2"><X size={16} /></button>}
           <button
             title="Refresh file tree"
             onClick={() => setRefresh((n) => n + 1)}
@@ -266,7 +271,7 @@ export function FilesWorkspace({
           />
         </div>
       </aside>
-      <section className="flex-1 min-w-0 flex flex-col overflow-hidden">
+      <section className={cn("flex-1 min-w-0 flex flex-col overflow-hidden", mobile && showTree && "hidden")}>
         <div className="flex border-b border-border bg-bg-secondary min-h-9 shrink-0">
           <button
             title={showTree ? "Hide explorer" : "Show explorer"}
@@ -275,7 +280,7 @@ export function FilesWorkspace({
           >
             <Folder size={14} />
           </button>
-          <div className="flex flex-1 overflow-x-auto">
+          <div className="flex flex-1 min-w-0 overflow-x-auto">
             {tabs.map(([tabKey, item]) => (
               <div
                 key={tabKey}
@@ -310,7 +315,7 @@ export function FilesWorkspace({
           <div className="flex-1 flex flex-col items-center justify-center gap-3 text-text-muted">
             <FileText size={36} />
             <p className="text-sm">Select a file to edit</p>
-            <p className="text-xs">
+            <p className="text-xs text-center px-4">
               Changes are written to the server only when you save.
             </p>
           </div>

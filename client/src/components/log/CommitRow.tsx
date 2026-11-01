@@ -100,7 +100,7 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
         </span>
 
         {/* Type */}
-        <span style={{ width: columnWidths.type }} className="flex-shrink-0 pl-1 flex items-center">
+        <span style={{ width: columnWidths.type }} className="commit-metadata flex-shrink-0 pl-1 flex items-center">
           {(() => {
             const commitType = detectCommitType(commit.message);
             if (!commitType) return null;
@@ -113,13 +113,13 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
         </span>
 
         {/* Author */}
-        <span style={{ width: columnWidths.author }} className="truncate flex-shrink-0 pl-1">{commit.authorName}</span>
+        <span style={{ width: columnWidths.author }} className="commit-metadata truncate flex-shrink-0 pl-1">{commit.authorName}</span>
 
         {/* Date */}
-        <span style={{ width: columnWidths.date }} className="flex-shrink-0 text-text-muted pl-1">{formatDate(commit.authorDate)}</span>
+        <span style={{ width: columnWidths.date }} className="commit-metadata flex-shrink-0 text-text-muted pl-1">{formatDate(commit.authorDate)}</span>
 
         {/* Hash */}
-        <span style={{ width: columnWidths.hash }} className="flex-shrink-0 font-mono text-text-muted pl-1">{truncateHash(commit.hash)}</span>
+        <span style={{ width: columnWidths.hash }} className="commit-metadata flex-shrink-0 font-mono text-text-muted pl-1">{truncateHash(commit.hash)}</span>
       </div>
 
       {/* Branch context menu */}

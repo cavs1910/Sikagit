@@ -91,7 +91,7 @@ export function BranchSwitcher({ repoPath }: { repoPath: string }) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-1 z-40 w-[280px] bg-bg-primary border border-border rounded-md shadow-lg flex flex-col max-h-[380px]">
+        <div className="branch-menu absolute left-0 top-full mt-1 z-40 w-[280px] bg-bg-primary border border-border rounded-md shadow-lg flex flex-col max-h-[380px]">
           {/* Filter */}
           <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border flex-shrink-0">
             <Search size={12} className="text-text-muted flex-shrink-0" />

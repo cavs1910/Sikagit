@@ -92,7 +92,7 @@ export function ProjectDialog({ project, onClose }: ProjectDialogProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="bg-bg-secondary border border-border rounded-lg w-[560px] shadow-xl flex flex-col max-h-[85vh]"
+        className="app-dialog bg-bg-secondary border border-border rounded-lg w-[560px] shadow-xl flex flex-col max-h-[85vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
