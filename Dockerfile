@@ -1,69 +1,32 @@
-# ============================================
-# Base stage — shared deps
-# ============================================
-FROM node:22-alpine AS base
-RUN apk add --no-cache git openssh-client python3 make g++ ffmpeg && git config --global safe.directory '*'
+# Hardened default; kept in sync with Dockerfile.reviewed.
+FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS build
+RUN apk add --no-cache python3 make g++
 WORKDIR /app
-
-# Copy workspace root + all package.json files
 COPY package.json package-lock.json ./
-COPY shared/package.json shared/
-COPY server/package.json server/
 COPY client/package.json client/
-
-RUN npm ci
-
-# Copy all source
-COPY shared/ shared/
-COPY server/ server/
+COPY server/package.json server/
+COPY shared/package.json shared/
+RUN npm ci --ignore-scripts --no-audit --no-fund
+RUN npm_config_nodedir=/usr/local npm rebuild better-sqlite3 --build-from-source
 COPY client/ client/
-
-# ============================================
-# Dev server — ts-node-dev with hot reload
-# ============================================
-FROM base AS dev-server
-WORKDIR /app
-COPY server/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-EXPOSE 3001
-ENTRYPOINT ["/entrypoint.sh"]
-CMD ["npm", "run", "dev", "-w", "server"]
-
-# ============================================
-# Dev client — Vite dev server with HMR
-# ============================================
-FROM base AS dev-client
-WORKDIR /app
-EXPOSE 5173
-CMD ["npm", "run", "dev", "-w", "client"]
-
-# ============================================
-# Production build
-# ============================================
-FROM base AS build
-RUN npm run build -w client
-
-# ============================================
-# Production image — serves built client + API
-# ============================================
-FROM node:22-alpine AS production
-RUN apk add --no-cache git openssh-client python3 make g++ && git config --global safe.directory '*'
-WORKDIR /app
-
-COPY package.json package-lock.json ./
-COPY shared/package.json shared/
-COPY server/package.json server/
-COPY client/package.json client/
-
-RUN npm ci --omit=dev
-
-COPY shared/ shared/
 COPY server/ server/
-COPY --from=build /app/client/dist client/dist
+COPY shared/ shared/
+RUN ./node_modules/.bin/tsc -p shared && npm run build -w server && cd client && ../node_modules/.bin/vite build
+RUN npm prune --omit=dev --ignore-scripts --no-audit --no-fund
 
-# Build server
-RUN npx -w server tsc
-
-EXPOSE 3001
-ENV NODE_ENV=production
-CMD ["node", "server/dist/src/index.js"]
+FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
+RUN apk add --no-cache git ca-certificates && addgroup -g 1001 sikagit && adduser -u 1001 -G sikagit -D -H -h /tmp/home sikagit && rm -rf /usr/local/lib/node_modules /opt/yarn-v* /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
+WORKDIR /app
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/server/dist ./server/dist
+COPY --from=build /app/shared ./shared
+COPY --from=build /app/client/dist ./client/dist
+RUN chmod -R a+rX /app/client/dist
+COPY git-policy.mjs /usr/local/lib/sikagit-git-policy.mjs
+COPY git-credential.mjs /usr/local/lib/sikagit-git-credential.mjs
+COPY --chmod=755 git-wrapper.sh /usr/local/bin/git
+COPY --chmod=755 git-credential.sh /usr/local/bin/sikagit-credential
+RUN chmod a+r /usr/local/lib/sikagit-*.mjs
+USER 1001:1001
+ENV NODE_ENV=production HOME=/tmp/home
+CMD ["node", "server/dist/server/src/index.js"]

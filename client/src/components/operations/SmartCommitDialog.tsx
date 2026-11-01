@@ -226,9 +226,9 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
                   className="flex items-center gap-1.5 px-4 py-1.5 rounded text-xs font-medium border border-accent bg-accent/10 hover:bg-accent/20 text-accent disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
                   {executing && pushAfterCommit ? (
-                    <><Loader2 size={12} className="animate-spin" /> Committing & Pushing...</>
+                    <><Loader2 size={12} className="animate-spin" /> Committing &amp; Pushing...</>
                   ) : (
-                    <><ArrowUp size={12} /> Commit & Push</>
+                    <><ArrowUp size={12} /> Commit &amp; Push</>
                   )}
                 </button>
               )}

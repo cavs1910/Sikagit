@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from 'express';
 const root = process.env.PROJECTS_ROOT || '/repos';
 const allowedOrigin = process.env.PUBLIC_ORIGIN || 'http://127.0.0.1:3001';
 const credentials = JSON.parse(fs.readFileSync(process.env.AUTH_FILE || '/run/secrets/auth.json', 'utf8'));
+if (typeof credentials.username !== 'string' || !credentials.username || typeof credentials.password !== 'string' || credentials.password.length < 16) throw new Error('Strong authentication credentials are required');
 const expected = createHash('sha256').update(`${credentials.username}:${credentials.password}`).digest();
 
 export function accessGuard(req: Request, res: Response, next: NextFunction): void {
@@ -44,22 +45,25 @@ export function confinedRepo(input: string): string {
   const actual = fs.realpathSync(input);
   const allowed = fs.realpathSync(root);
   if (actual !== allowed && !actual.startsWith(allowed + path.sep)) throw new Error('Repository outside allowed root');
+  if (path.relative(allowed, actual).split(path.sep).includes('.git')) throw new Error('Git metadata is not a repository root');
   return actual;
 }
 
 export function confinedFile(repo: string, file: string): string {
-  if (typeof file !== 'string' || !file || path.isAbsolute(file) || file.includes('\0') || file.startsWith('-')) throw new Error('Invalid file path');
+  if (typeof file !== 'string' || !file || path.isAbsolute(file) || /[\0\r\n]/.test(file) || file.startsWith('-')) throw new Error('Invalid file path');
   const base = confinedRepo(repo);
   const full = path.resolve(base, file);
   if (!full.startsWith(base + path.sep) || path.relative(base, full).split(path.sep).includes('.git')) throw new Error('File outside repository or Git metadata');
   let probe = full;
-  while (!fs.existsSync(probe)) {
+  while (true) {
+    try { fs.lstatSync(probe); break; } catch (err: any) { if (err.code !== 'ENOENT') throw err; }
     const parent = path.dirname(probe);
     if (parent === probe) throw new Error('Invalid file path');
     probe = parent;
   }
   const actual = fs.realpathSync(probe);
   if (actual !== base && !actual.startsWith(base + path.sep)) throw new Error('Symlink escapes repository');
+  if (path.relative(base, actual).split(path.sep).includes('.git')) throw new Error('Symlink resolves to Git metadata');
   return full;
 }
 

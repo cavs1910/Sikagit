@@ -416,7 +416,7 @@ export async function getLogWithParents(
   const git = getGit(repoPath);
 
   // Use raw log to get parent hashes
-  const format = '%H%n%h%n%an%n%ae%n%aI%n%s%n%b%n%P%n%D%n---END---';
+  const format = '%H%x00%h%x00%an%x00%ae%x00%aI%x00%s%x00%b%x00%P%x00%D%x00';
   let result: string;
   let headHash = '';
   try {
@@ -437,21 +437,16 @@ export async function getLogWithParents(
 
   if (!result || !result.trim()) return [];
 
-  const entries = result.split('---END---\n').filter(Boolean);
+  const fields = result.split('\0');
+  const entries: string[][] = [];
+  for (let i = 0; i + 8 < fields.length; i += 9) entries.push(fields.slice(i, i + 9));
 
   // Deduplicate — reflog can show the same commit multiple times
   const seen = new Set<string>();
   const allCommits = entries.map(entry => {
-    const lines = entry.split('\n');
-    const hash = lines[0];
-    const abbreviatedHash = lines[1];
-    const authorName = lines[2];
-    const authorEmail = lines[3];
-    const authorDate = lines[4];
-    const message = lines[5];
-    const body = lines.slice(6, -3).join('\n');
-    const parentHashes = lines[lines.length - 3]?.split(' ').filter(Boolean) || [];
-    const refs = lines[lines.length - 2] || '';
+    const [rawHash, abbreviatedHash, authorName, authorEmail, authorDate, message, body, parents, refs] = entry;
+    const hash = rawHash.replace(/^\n/, '');
+    const parentHashes = parents.split(' ').filter(Boolean);
 
     const branches: string[] = [];
     const tags: string[] = [];
@@ -995,12 +990,10 @@ export async function discardChanges(repoPath: string, files: string[]): Promise
 export async function deleteUntrackedFiles(repoPath: string, files: string[]): Promise<void> {
   safeFiles(repoPath, files);
   const normalized = normalizePath(repoPath);
-  const { unlinkSync } = await import('fs');
-  for (const file of files) {
-    try {
-      unlinkSync(confinedFile(normalized, file));
-    } catch { /* file may already be gone */ }
-  }
+  const git = getGit(repoPath);
+  const untracked = new Set((await git.raw(['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean));
+  if (files.some(file => !untracked.has(file))) throw new Error('Only currently untracked files may be deleted');
+  for (const file of files) unlinkSync(confinedFile(normalized, file));
 }
 
 export async function saveForLater(
@@ -1037,7 +1030,9 @@ export async function saveForLater(
   }
 
   // Remember currently staged files to restore after
+  if (status.files.some(f => f.index !== ' ' && f.index !== '?' && f.working_dir !== ' ' && f.working_dir !== '?')) throw new Error('Save for later cannot preserve partially staged files; unstage them first');
   const savedStaged = status.staged || [];
+  let savedCommit = false;
 
   // Create the save branch from HEAD
   await git.branch([branchName]);
@@ -1056,8 +1051,9 @@ export async function saveForLater(
       throw new Error('Author identity not configured. Please set Author Name and Email in Repository Settings.');
     }
     const result = execFileSync('git', ['-c', `user.name=${author.name}`, '-c', `user.email=${author.email}`, 'commit', '-m', message], { cwd: normalized, encoding: 'utf-8', timeout: 30000 });
+    savedCommit = true;
     const match = result.match(/\[[\w/.-]+\s+([a-f0-9]+)\]/);
-    const commitHash = match ? match[1] : '';
+    const commitHash = match ? match[1] : (await git.revparse(['HEAD'])).trim();
 
     // Switch back to original branch
     await git.checkout([currentBranch]);
@@ -1097,11 +1093,12 @@ export async function saveForLater(
   } catch (err) {
     // Rollback: try to get back to original branch and delete save branch
     try { await git.checkout([currentBranch]); } catch { /* best effort */ }
-    try { await git.branch(['-D', branchName]); } catch { /* best effort */ }
+    if (!savedCommit) { try { await git.branch(['-D', branchName]); } catch { /* best effort */ } }
     // Re-stage saved staged files
     if (savedStaged.length > 0) {
       try { await git.add(savedStaged); } catch { /* best effort */ }
     }
+    if (savedCommit) throw new Error(`Cleanup failed; your saved commit is retained on branch ${branchName}. Inspect it before retrying.`);
     throw err;
   }
 }
@@ -1349,5 +1346,8 @@ export async function getFileContent(repoPath: string, filePath: string, commitH
     return result;
   }
   // Working tree file
-  return readFileSync(confinedFile(normalized, filePath));
+  const fullPath = confinedFile(normalized, filePath);
+  const stat = statSync(fullPath);
+  if (!stat.isFile() || stat.size > 10 * 1024 * 1024) throw new Error('File preview requires a regular file of at most 10 MiB');
+  return readFileSync(fullPath);
 }

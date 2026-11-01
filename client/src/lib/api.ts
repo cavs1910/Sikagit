@@ -1,4 +1,4 @@
-import type { ApiResponse, DiffPayload, DiffWhitespaceMode } from '@sikagit/shared';
+import type { ApiResponse, DiffPayload, DiffWhitespaceMode, GraphCommit } from '@sikagit/shared';
 
 const BASE_URL = '/api/v1';
 
@@ -93,7 +93,7 @@ export const api = {
   getLog: (repo: string, limit = 200, skip = 0) =>
     request<import('@sikagit/shared').GitCommit[]>(`/git/log?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}`),
   getGraph: (repo: string, limit = 200, skip = 0) =>
-    request<{ commits: import('@sikagit/shared').GraphCommit[]; totalLanes: number }>(
+    request<{ commits: GraphCommit[]; totalLanes: number }>(
       `/git/graph?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}`
     ),
   getBranches: (repo: string) => request<import('@sikagit/shared').GitBranch[]>(`/git/branches?repo=${encodeURIComponent(repo)}`),

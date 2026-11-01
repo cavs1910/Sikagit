@@ -1,3 +1,5 @@
+> **Private-server security fork:** this branch contains additional hardening and a smaller, non-root runtime. Start with [reviewed deployment](deploy/README.md) and [security review](docs/SECURITY_REVIEW.md). Default Docker/Compose files now use the hardened configuration and require explicit state, credentials and repository paths. Upstream development commands are not a drop-in configuration for this fork. The upstream source-available license still applies.
+
 <div align="center">
 
 <img src="client/public/logo-128.png" alt="SikaGit logo" width="72" height="72" />

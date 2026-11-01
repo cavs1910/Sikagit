@@ -8,3 +8,13 @@ data
 secrets
 *.patch
 AUDIT.txt
+
+**/node_modules
+**/.git
+**/.env
+**/.env.*
+!**/.env.example
+**/secrets
+**/backups
+**/security-reports
+*.db

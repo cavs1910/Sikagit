@@ -29,7 +29,6 @@ services:
       AUTH_FILE: /run/secrets/auth.json
       PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN}
       CORS_ORIGINS: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN}
-      GH_CONFIG_DIR: /run/gh
       GIT_TERMINAL_PROMPT: "0"
     ports:
       - "127.0.0.1:8448:3001"

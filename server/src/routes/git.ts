@@ -8,6 +8,21 @@ import * as db from '../services/db';
 
 const router = Router();
 
+// Prevent truthy JSON strings (such as force: "false") from enabling destructive options.
+router.use((req, res, next) => {
+  for (const key of ['amend', 'force', 'setUpstream', 'allowUnrelatedHistories']) {
+    if (req.body?.[key] !== undefined && typeof req.body[key] !== 'boolean') {
+      res.status(400).json({ success: false, error: `${key} must be a boolean` }); return;
+    }
+  }
+  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'key', 'value', 'url', 'branchName', 'patch']) {
+    if (req.body?.[key] !== undefined && typeof req.body[key] !== 'string') {
+      res.status(400).json({ success: false, error: `${key} must be a string` }); return;
+    }
+  }
+  next();
+});
+
 function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<void>) {
   return (req: Request, res: Response, next: NextFunction) => {
     fn(req, res, next).catch(next);
@@ -154,16 +169,16 @@ router.get('/status', asyncHandler(async (req: Request, res: Response) => {
 
 router.get('/log', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const limit = parseInt(req.query.limit as string) || 200;
-  const skip = parseInt(req.query.skip as string) || 0;
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 200));
+  const skip = Math.max(0, parseInt(req.query.skip as string) || 0);
   const commits = await withRepoLock(repoPath, () => gitService.getLogWithParents(repoPath, limit, skip));
   res.json({ success: true, data: commits });
 }));
 
 router.get('/graph', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const limit = parseInt(req.query.limit as string) || 200;
-  const skip = parseInt(req.query.skip as string) || 0;
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 200));
+  const skip = Math.max(0, parseInt(req.query.skip as string) || 0);
   const commits = await withRepoLock(repoPath, () => gitService.getLogWithParents(repoPath, limit, skip));
   const graph = computeGraph(commits);
   res.json({ success: true, data: graph });
@@ -350,7 +365,7 @@ router.post('/delete-untracked', asyncHandler(async (req: Request, res: Response
     res.status(400).json({ success: false, error: 'Missing required field: files (array)' });
     return;
   }
-  await gitService.deleteUntrackedFiles(repoPath, files);
+  await withRepoLock(repoPath, () => gitService.deleteUntrackedFiles(repoPath, files));
   res.json({ success: true });
 }));
 
@@ -468,6 +483,7 @@ router.delete('/lock', asyncHandler(async (req: Request, res: Response) => {
   const path = await import('path');
   const lockFile = path.join(repoPath, '.git', 'index.lock');
   if (fs.existsSync(lockFile)) {
+    if (Date.now() - fs.statSync(lockFile).mtimeMs < 3600000) throw new Error('Refusing to remove a recent Git lock; wait for the operation to finish');
     fs.unlinkSync(lockFile);
     res.json({ success: true, data: { removed: true } });
   } else {

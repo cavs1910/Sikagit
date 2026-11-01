@@ -1,61 +1,36 @@
+# Hardened default for this fork; requires explicit external state and repo paths.
 services:
-  server:
+  sikagit:
+    image: local/sikagit:reviewed
     build:
       context: .
-      dockerfile: Dockerfile
-      target: dev-server
-    ports:
-      - "3001:3001"
-      # Dev server ports for repo run commands
-      - "3000:3000"
-      - "3002-3010:3002-3010"
-      - "3220:3220"
-      - "4200:4200"
-      - "5000-5001:5000-5001"
-      # 8000 reserved for FTW Expo
-      # - "8000:8000"
-      # Host ports remapped out of 8000-8999 range (control panel uses 8080)
-      - "9100-9103:8080-8083"
-      - "9105-9110:8085-8090"
-      - "9000:9000"
+      dockerfile: Dockerfile.reviewed
+    user: "1001:1001"
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 160
+    mem_limit: 1g
+    cpus: 2
+    tmpfs:
+      - /tmp:rw,nosuid,nodev,size=128m,uid=1001,gid=1001
     volumes:
-      - ./server/src:/app/server/src
-      - ./shared:/app/shared
-      - ./data:/app/server/data
-      # Mount host filesystem so git repos are accessible
-      - /home:/host/home
-      - /mnt:/host/mnt
-      # Mount SSH keys for git remote operations
-      - ~/.ssh:/root/.ssh:ro
-      # Mount gh CLI config for HTTPS credential helper
-      - ~/.config/gh:/root/.config/gh:ro
+      - ${SIKAGIT_STATE_DIR:?Set SIKAGIT_STATE_DIR}/data:/data
+      - ${HOST_REPO_PATH:?Set HOST_REPO_PATH}:/repos/project
+      - ${SIKAGIT_STATE_DIR}/secrets/auth.json:/run/secrets/auth.json:ro
+      - ${SIKAGIT_STATE_DIR}/gitconfig:/etc/gitconfig:ro
+      - ${GH_HOSTS_FILE:?Set GH_HOSTS_FILE}:/run/gh/hosts.yml:ro
     environment:
-      - PORT=3001
-      - NODE_ENV=development
-      - CORS_ORIGINS=http://localhost:3200,http://127.0.0.1:3200
-      - DATA_DIR=/app/server/data
-      - GIT_SSH_COMMAND=ssh -o StrictHostKeyChecking=no
-      - AZURE_DEVOPS_PAT=${AZURE_DEVOPS_PAT:-}
-      - STATUS_TIMEOUT_MS=${STATUS_TIMEOUT_MS:-8000}
-      # Idle budget for fetch/pull/push. Much larger than the status timeout:
-      # it bounds how long a remote may stay silent, not how long a transfer runs.
-      - GIT_NETWORK_TIMEOUT_MS=${GIT_NETWORK_TIMEOUT_MS:-120000}
-    restart: unless-stopped
-
-  client:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: dev-client
+      NODE_ENV: production
+      PORT: "3001"
+      DATA_DIR: /data
+      PROJECTS_ROOT: /repos
+      AUTH_FILE: /run/secrets/auth.json
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN}
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN}
+      GIT_TERMINAL_PROMPT: "0"
     ports:
-      - "3200:5173"
-    volumes:
-      - ./client/src:/app/client/src
-      - ./client/public:/app/client/public
-      - ./client/index.html:/app/client/index.html
-      - ./shared:/app/shared
-    environment:
-      - VITE_API_URL=http://server:3001
-    depends_on:
-      - server
+      - "127.0.0.1:8448:3001"
     restart: unless-stopped
