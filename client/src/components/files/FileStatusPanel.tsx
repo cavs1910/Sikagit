@@ -195,7 +195,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
   const [smartCommitOpen, setSmartCommitOpen] = useState(false);
   const smartCommitRunning = useSmartCommitStore(s => s.running.has(repoPath));
   const [saveForLaterOpen, setSaveForLaterOpen] = useState(false);
-  const { aiEnabled, aiApiKey, aiModel, backgroundSmartCommit, backgroundSmartCommitPush } = useUIStore();
+  const { aiEnabled, aiConfigured, backgroundSmartCommit, backgroundSmartCommitPush } = useUIStore();
   const [collapsedUnstagedFolders, setCollapsedUnstagedFolders] = useState<Set<string>>(new Set());
   const [collapsedStagedFolders, setCollapsedStagedFolders] = useState<Set<string>>(new Set());
 
@@ -239,8 +239,6 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
     try {
       const outcome = await withActivity(`Smart Commit: ${repoName}`, () =>
         runBackgroundSmartCommit(repoPath, {
-          apiKey: aiApiKey,
-          model: aiModel,
           push: backgroundSmartCommitPush,
           setUpstream: !status?.tracking,
         }),
@@ -266,7 +264,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
         if (repo) useRepoStatusStore.getState().forceRefreshOne(repo);
       }
     }
-  }, [backgroundSmartCommit, backgroundSmartCommitPush, repoPath, aiApiKey, aiModel, status?.tracking, addToast, fetchStatus, fetchLog]);
+  }, [backgroundSmartCommit, backgroundSmartCommitPush, repoPath, status?.tracking, addToast, fetchStatus, fetchLog]);
 
   // Auto-poll status every 7 seconds to detect external file changes.
   // Pauses while the tab is hidden — `git status` on a large working tree
@@ -702,7 +700,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
               <GitCommitHorizontal size={10} />
               <span className="text-[0.6rem] font-medium">Commit</span>
             </button>
-            {aiEnabled && !!aiApiKey && (
+            {aiEnabled && aiConfigured && (
               <button
                 onClick={handleSmartCommitClick}
                 disabled={stagedFiles.length === 0 || smartCommitRunning}

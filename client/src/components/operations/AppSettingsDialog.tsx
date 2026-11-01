@@ -1,6 +1,7 @@
+import { AISettingsPanel } from './AISettingsPanel';
 import { useState } from 'react';
-import { X, Settings, Minus, Plus, Type, Code2, Palette, RotateCcw, Sparkles, Eye, EyeOff } from 'lucide-react';
-import { DEFAULT_AI_MODEL, useUIStore } from '../../store/uiStore';
+import { X, Settings, Minus, Plus, Type, Code2, Palette, RotateCcw, Sparkles } from 'lucide-react';
+import { useUIStore } from '../../store/uiStore';
 import { cn } from '../../lib/utils';
 
 interface AppSettingsDialogProps {
@@ -14,21 +15,6 @@ const tabs: { id: Tab; label: string; icon: typeof Type }[] = [
   { id: 'editor', label: 'Diff / Editor', icon: Code2 },
   { id: 'appearance', label: 'Appearance', icon: Palette },
   { id: 'ai', label: 'AI', icon: Sparkles },
-];
-
-// Flash-family text models only (the Pro models were retired from this list;
-// the store migrates any saved unsupported choice to the default). Keep in
-// sync with SUPPORTED_AI_MODELS in store/uiStore.ts.
-const AI_MODELS = [
-  { id: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
-  { id: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
-  { id: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
-  { id: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
-  { id: 'gemini-3.5-flash-lite', label: 'Gemini 3.5 Flash-Lite' },
-  { id: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite' },
-  { id: 'gemini-3-flash-preview', label: 'Gemini 3 Flash (preview)' },
-  { id: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
-  { id: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
 ];
 
 function SizeControl({ label, value, onChange, min, max, description }: {
@@ -86,11 +72,6 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     groupFilesByFolder, setGroupFilesByFolder,
     autoFetchOnOpen, setAutoFetchOnOpen,
     demoMode, setDemoMode,
-    aiEnabled, setAiEnabled,
-    aiApiKey, setAiApiKey,
-    aiModel, setAiModel,
-    backgroundSmartCommit, setBackgroundSmartCommit,
-    backgroundSmartCommitPush, setBackgroundSmartCommitPush,
   } = useUIStore();
 
   const [activeTab, setActiveTab] = useState<Tab>('general');
@@ -103,12 +84,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
   const [draftGroupFiles, setDraftGroupFiles] = useState(groupFilesByFolder);
   const [draftAutoFetch, setDraftAutoFetch] = useState(autoFetchOnOpen);
   const [draftDemoMode, setDraftDemoMode] = useState(demoMode);
-  const [draftAiEnabled, setDraftAiEnabled] = useState(aiEnabled);
-  const [draftAiApiKey, setDraftAiApiKey] = useState(aiApiKey);
-  const [draftAiModel, setDraftAiModel] = useState(aiModel);
-  const [draftBgSmartCommit, setDraftBgSmartCommit] = useState(backgroundSmartCommit);
-  const [draftBgSmartCommitPush, setDraftBgSmartCommitPush] = useState(backgroundSmartCommitPush);
-  const [showApiKey, setShowApiKey] = useState(false);
+
 
   const hasChanges =
     draftFontSize !== fontSize ||
@@ -117,12 +93,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     draftTheme !== theme ||
     draftGroupFiles !== groupFilesByFolder ||
     draftAutoFetch !== autoFetchOnOpen ||
-    draftDemoMode !== demoMode ||
-    draftAiEnabled !== aiEnabled ||
-    draftAiApiKey !== aiApiKey ||
-    draftAiModel !== aiModel ||
-    draftBgSmartCommit !== backgroundSmartCommit ||
-    draftBgSmartCommitPush !== backgroundSmartCommitPush;
+    draftDemoMode !== demoMode;
 
   const handleSave = () => {
     setFontSize(draftFontSize);
@@ -132,11 +103,6 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setGroupFilesByFolder(draftGroupFiles);
     setAutoFetchOnOpen(draftAutoFetch);
     setDemoMode(draftDemoMode);
-    setAiEnabled(draftAiEnabled);
-    setAiApiKey(draftAiApiKey);
-    setAiModel(draftAiModel);
-    setBackgroundSmartCommit(draftBgSmartCommit);
-    setBackgroundSmartCommitPush(draftBgSmartCommitPush);
     onClose();
   };
 
@@ -148,17 +114,13 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     setDraftGroupFiles(true);
     setDraftAutoFetch(true);
     setDraftDemoMode(false);
-    setDraftAiEnabled(false);
-    setDraftAiApiKey('');
-    setDraftAiModel(DEFAULT_AI_MODEL);
-    setDraftBgSmartCommit(false);
-    setDraftBgSmartCommitPush(false);
+
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
-        className="bg-bg-secondary border border-border rounded-lg w-[680px] h-[600px] shadow-xl flex flex-col max-h-[90vh]"
+        className="bg-bg-secondary border border-border rounded-lg w-[780px] max-w-[96vw] h-[680px] shadow-xl flex flex-col max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -433,146 +395,12 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
               </div>
             )}
 
-            {activeTab === 'ai' && (
-              <div className="space-y-5">
-                <div>
-                  <h3 className="text-xs font-medium text-text-primary mb-1">AI Assistant</h3>
-                  <p className="text-[0.6rem] text-text-muted mb-3">Use Google Gemini to generate commit messages and smart-split changes</p>
-                </div>
-
-                {/* Enable/Disable toggle */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-xs font-medium text-text-primary mb-0.5">Enable AI</h3>
-                    <p className="text-[0.6rem] text-text-muted">Show AI features in the commit workflow</p>
-                  </div>
-                  <div
-                    onClick={() => setDraftAiEnabled(!draftAiEnabled)}
-                    style={{
-                      width: 32, height: 18, borderRadius: 9,
-                      backgroundColor: draftAiEnabled ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                      border: `1px solid ${draftAiEnabled ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                      cursor: 'pointer', flexShrink: 0, position: 'relative',
-                      transition: 'background-color 0.2s, border-color 0.2s',
-                    }}
-                  >
-                    <div style={{
-                      width: 12, height: 12, borderRadius: '50%', backgroundColor: '#fff',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.2)', position: 'absolute', top: 2,
-                      left: draftAiEnabled ? 17 : 2, transition: 'left 0.2s',
-                    }} />
-                  </div>
-                </div>
-
-                {/* API Key */}
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5 font-medium">Google AI API Key</label>
-                  <div className="relative">
-                    <input
-                      type={showApiKey ? 'text' : 'password'}
-                      value={draftAiApiKey}
-                      onChange={e => setDraftAiApiKey(e.target.value)}
-                      placeholder="Enter your Gemini API key"
-                      className="w-full bg-bg-primary border border-border rounded px-3 py-2 pr-9 text-sm text-text-primary font-mono text-xs focus:outline-none focus:border-accent"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary"
-                    >
-                      {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
-                    </button>
-                  </div>
-                  <p className="text-[0.6rem] text-text-muted mt-1">
-                    Get your key from <span className="text-accent">aistudio.google.com</span>. Stored locally in your browser.
-                  </p>
-                </div>
-
-                {/* Model selection */}
-                <div>
-                  <label className="block text-xs text-text-secondary mb-1.5 font-medium">Model</label>
-                  <select
-                    value={draftAiModel}
-                    onChange={e => setDraftAiModel(e.target.value)}
-                    className="w-full bg-bg-primary border border-border rounded px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent"
-                  >
-                    {AI_MODELS.map(m => (
-                      <option key={m.id} value={m.id}>{m.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Background Smart Commit */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Background Smart Commit</h3>
-                      <p className="text-[0.6rem] text-text-muted">Skip the review dialog — clicking <strong>Smart Commit</strong> analyzes your staged changes and creates the AI-suggested commits automatically.</p>
-                    </div>
-                    <div
-                      onClick={() => setDraftBgSmartCommit(!draftBgSmartCommit)}
-                      style={{
-                        width: 32, height: 18, borderRadius: 9,
-                        backgroundColor: draftBgSmartCommit ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                        border: `1px solid ${draftBgSmartCommit ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        cursor: 'pointer', flexShrink: 0, position: 'relative',
-                        transition: 'background-color 0.2s, border-color 0.2s',
-                      }}
-                    >
-                      <div style={{
-                        width: 12, height: 12, borderRadius: '50%', backgroundColor: '#fff',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.2)', position: 'absolute', top: 2,
-                        left: draftBgSmartCommit ? 17 : 2, transition: 'left 0.2s',
-                      }} />
-                    </div>
-                  </div>
-
-                  {/* Dependent sub-toggle: only meaningful when background mode is on */}
-                  <div className="flex items-center justify-between pl-4" style={{ opacity: draftBgSmartCommit ? 1 : 0.4 }}>
-                    <div>
-                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Also push after committing</h3>
-                      <p className="text-[0.6rem] text-text-muted">Run <span className="font-mono">git push</span> right after the background commit.</p>
-                    </div>
-                    <div
-                      onClick={() => { if (draftBgSmartCommit) setDraftBgSmartCommitPush(!draftBgSmartCommitPush); }}
-                      style={{
-                        width: 32, height: 18, borderRadius: 9,
-                        backgroundColor: draftBgSmartCommitPush ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                        border: `1px solid ${draftBgSmartCommitPush ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        cursor: draftBgSmartCommit ? 'pointer' : 'not-allowed', flexShrink: 0, position: 'relative',
-                        transition: 'background-color 0.2s, border-color 0.2s',
-                      }}
-                    >
-                      <div style={{
-                        width: 12, height: 12, borderRadius: '50%', backgroundColor: '#fff',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.2)', position: 'absolute', top: 2,
-                        left: draftBgSmartCommitPush ? 17 : 2, transition: 'left 0.2s',
-                      }} />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Info */}
-                <div className="border border-border rounded-lg p-3 bg-bg-primary">
-                  <p className="text-[0.6rem] text-text-muted mb-2 font-medium uppercase tracking-wider">Features</p>
-                  <ul className="text-[0.65rem] text-text-secondary space-y-1.5">
-                    <li className="flex items-start gap-2">
-                      <Sparkles size={11} className="text-accent mt-0.5 flex-shrink-0" />
-                      <span><strong>AI Suggest</strong> — Auto-generate commit title and description from your staged changes</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Sparkles size={11} className="text-accent mt-0.5 flex-shrink-0" />
-                      <span><strong>Smart Commit</strong> — AI groups related changes into separate logical commits</span>
-                    </li>
-                  </ul>
-                </div>
-              </div>
-            )}
+            {activeTab === 'ai' && <AISettingsPanel />}
           </div>
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border flex-shrink-0">
+        <div className={cn("flex items-center justify-between px-4 py-3 border-t border-border flex-shrink-0", activeTab === "ai" && "hidden")}>
           <button
             onClick={handleReset}
             className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors"

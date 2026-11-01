@@ -1,0 +1,9 @@
+// Only loaded by the isolated test child, never by the production server.
+const fs=require('node:fs');
+const original=global.fetch;
+global.fetch=async(url,init)=>{
+ if(!String(url).startsWith('https://api.openai.com/')&&!String(url).startsWith('https://openrouter.ai/')) return original(url,init);
+ const fixture=JSON.parse(fs.readFileSync(process.env.AI_TEST_FIXTURE,'utf8'));
+ if(fixture.status) return new Response(JSON.stringify({error:{message:'secret-provider-error-'+fixture.secret}}),{status:fixture.status,headers:{'content-type':'application/json'}});
+ return new Response(JSON.stringify({id:'chatcmpl-test',object:'chat.completion',created:1,model:'test-model',choices:[{index:0,message:{role:'assistant',content:JSON.stringify(fixture.output)},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
+};

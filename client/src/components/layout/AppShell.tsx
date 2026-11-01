@@ -1,3 +1,4 @@
+import { refreshAISettings } from '../../lib/aiSettings';
 import { useEffect, useCallback } from 'react';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
@@ -13,6 +14,7 @@ export function AppShell() {
 
   // Fetches repos + projects and keeps the open project/repo in sync with the URL.
   useUrlSelection();
+  useEffect(()=>{void refreshAISettings(); const refresh=()=>{void refreshAISettings();}; window.addEventListener('focus',refresh); return ()=>window.removeEventListener('focus',refresh);},[]);
 
   // Reload the open repo's commits/branches/status when the tab becomes visible
   // or the window regains focus (rate-limited per repo inside).

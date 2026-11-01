@@ -41,9 +41,9 @@ export function SaveForLaterDialog({ repoPath, files, onClose }: SaveForLaterDia
   const fetchAll = useStatusStore(s => s.fetchAll);
   const clearChecked = useStatusStore(s => s.clearChecked);
   const addToast = useToastStore(s => s.addToast);
-  const { aiEnabled, aiApiKey, aiModel } = useUIStore();
+  const { aiEnabled, aiConfigured } = useUIStore();
 
-  const aiReady = aiEnabled && !!aiApiKey;
+  const aiReady = aiEnabled && aiConfigured;
 
   const newCount = files.filter(f => f.index === '?' || f.index === 'A').length;
   const modifiedCount = files.filter(f => f.index === 'M' || f.workingDir === 'M').length;
@@ -54,7 +54,7 @@ export function SaveForLaterDialog({ repoPath, files, onClose }: SaveForLaterDia
     setSuggesting(true);
     setError('');
     try {
-      const result = await api.aiSuggestSaveForLater(repoPath, aiApiKey, aiModel, filePaths);
+      const result = await api.aiSuggestSaveForLater(repoPath, filePaths);
       setBranchName(result.branchName);
       setMessage(result.message);
     } catch (err: any) {

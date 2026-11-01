@@ -43,7 +43,7 @@ SikaGit is a self-hosted Git client with a full graphical interface that runs en
 | Hunk-level staging | ✅ | ✅ | ⚠️ | ✅ |
 | AI commit messages | 💲 Paid add-on | ❌ | ❌ | ✅ **BYO key** |
 
-<sub>AI commit messages in SikaGit use your own Google Gemini API key. Competitor rows reflect their standard offerings at time of writing.</sub>
+<sub>AI commit messages in SikaGit use your own provider API key via Vercel AI SDK. Competitor rows reflect their standard offerings at time of writing.</sub>
 
 ## Features
 
@@ -53,7 +53,7 @@ SikaGit is a self-hosted Git client with a full graphical interface that runs en
 - **Hunk-level staging** — stage or discard individual hunks, not just whole files, straight from the diff.
 - **Full staging control** — staged/unstaged panels with folder grouping, bulk stage/discard, and one-click stage-all.
 
-**AI assist** (bring your own Google Gemini key)
+**AI assist** (bring your own provider key)
 - **AI commit messages** — generate a commit message from your staged diff.
 - **Smart commit grouping** — let AI split a messy working tree into coherent, separately-committable groups.
 - **Save-for-later** — AI-suggested branch name + message to park work-in-progress on a side branch.
@@ -121,7 +121,7 @@ _Coming soon._ To add them, drop the image files at the paths below and uncommen
 | Frontend | React 19 · Vite 6 · TailwindCSS 4 · Zustand 5 · Radix UI · Lucide / react-icons |
 | Backend | Node.js 22 · Express 4 · simple-git 3 · Socket.io 4 |
 | Database | SQLite (better-sqlite3) |
-| AI | Google Gemini (`gemini-3.8-flash`, bring your own API key) |
+| AI | Vercel AI SDK: OpenAI, Anthropic, Google, OpenRouter, Groq, DeepSeek, Mistral, xAI |
 | Infra | Docker · Docker Compose · npm workspaces |
 | Language | TypeScript 5.9 (types shared across client & server) |
 
@@ -166,3 +166,7 @@ SikaGit is released under the [Sikasio Source Available License](LICENSE). Free 
 <div align="center">
 <sub>Built by <a href="https://sikasio.com"><strong>Sikasio</strong></a> — a design & development studio from Cairo, Egypt.</sub>
 </div>
+
+### Multi-provider AI configuration
+
+Configure your provider, model and API key in **Settings → AI**. Configuration is stored on the server and shared across devices. See [AI configuration and privacy](docs/AI_CONFIGURATION.md).

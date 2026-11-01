@@ -661,7 +661,7 @@ function diffScopeArgs(repoPath: string, commitHash?: string, filePath?: string,
   }
 
   if (filePath) {
-    args.push('--', filePath);
+    args.push('--', ':(literal)' + filePath);
   }
 
   return args;

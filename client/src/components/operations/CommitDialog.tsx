@@ -19,9 +19,9 @@ export function CommitDialog({ repoPath, stagedCount, onClose }: CommitDialogPro
   const [error, setError] = useState('');
   const fetchStatus = useStatusStore(s => s.fetchStatus);
   const fetchLog = useLogStore(s => s.fetchLog);
-  const { aiEnabled, aiApiKey, aiModel } = useUIStore();
+  const { aiEnabled, aiConfigured } = useUIStore();
 
-  const aiReady = aiEnabled && !!aiApiKey;
+  const aiReady = aiEnabled && aiConfigured;
 
   const handleCommit = async () => {
     if (!message.trim() || stagedCount === 0) return;
@@ -44,7 +44,7 @@ export function CommitDialog({ repoPath, stagedCount, onClose }: CommitDialogPro
     setSuggesting(true);
     setError('');
     try {
-      const result = await api.aiSuggest(repoPath, aiApiKey, aiModel);
+      const result = await api.aiSuggest(repoPath);
       const msg = result.description
         ? `${result.title}\n\n${result.description}`
         : result.title;

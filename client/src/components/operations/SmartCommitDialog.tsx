@@ -4,7 +4,6 @@ import { api } from '../../lib/api';
 import { executeSmartCommit, describeSmartCommitSuccess } from '../../lib/smartCommit';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
-import { useUIStore } from '../../store/uiStore';
 import { useToastStore } from '../../store/toastStore';
 
 interface SmartCommitDialogProps {
@@ -19,12 +18,12 @@ interface CommitGroup {
 }
 
 export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps) {
-  const { aiApiKey, aiModel } = useUIStore();
   const status = useStatusStore(s => s.status);
   const fetchStatus = useStatusStore(s => s.fetchStatus);
   const fetchLog = useLogStore(s => s.fetchLog);
   const addToast = useToastStore(s => s.addToast);
 
+  const [planId, setPlanId] = useState('');
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
   const [pushAfterCommit, setPushAfterCommit] = useState(false);
@@ -34,20 +33,21 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
   const [editingGroup, setEditingGroup] = useState<number | null>(null);
 
   useEffect(() => {
-    api.aiSmartCommitPreview(repoPath, aiApiKey, aiModel)
+    api.aiSmartCommitPreview(repoPath)
       .then(result => {
         setGroups(result.groups);
+        setPlanId(result.planId);
         setExpandedGroup(0);
       })
       .catch(err => setError(err.message || 'Failed to analyze changes'))
       .finally(() => setLoading(false));
-  }, [repoPath, aiApiKey, aiModel]);
+  }, [repoPath]);
 
   const handleExecute = async () => {
     setExecuting(true);
     setError('');
     try {
-      const outcome = await executeSmartCommit(repoPath, groups, { push: false, setUpstream: false });
+      const outcome = await executeSmartCommit(repoPath, groups, { push: false, setUpstream: false, planId });
       if (!outcome.ok) {
         setError(outcome.error || 'Smart commit failed');
         return;
@@ -66,7 +66,7 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
     setPushAfterCommit(true);
     setError('');
     try {
-      const outcome = await executeSmartCommit(repoPath, groups, { push: true, setUpstream: !status?.tracking });
+      const outcome = await executeSmartCommit(repoPath, groups, { push: true, setUpstream: !status?.tracking, planId });
       if (!outcome.ok) {
         setError(outcome.error || 'Smart commit failed');
         return;

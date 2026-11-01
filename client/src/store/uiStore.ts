@@ -27,8 +27,7 @@ interface UIState {
   autoFetchOnOpen: boolean;
   demoMode: boolean;
   aiEnabled: boolean;
-  aiApiKey: string;
-  aiModel: string;
+  aiConfigured: boolean;
   backgroundSmartCommit: boolean;       // run Smart Commit without the review dialog
   backgroundSmartCommitPush: boolean;   // also push after the background commit (only if above is on)
   toggleSidebar: () => void;
@@ -51,8 +50,6 @@ interface UIState {
   setAutoFetchOnOpen: (v: boolean) => void;
   setDemoMode: (v: boolean) => void;
   setAiEnabled: (v: boolean) => void;
-  setAiApiKey: (key: string) => void;
-  setAiModel: (model: string) => void;
   setBackgroundSmartCommit: (v: boolean) => void;
   setBackgroundSmartCommitPush: (v: boolean) => void;
 }
@@ -67,21 +64,6 @@ const BOTTOM_PANEL_MAX = 500;
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
 }
-
-// Gemini model used for AI suggestions: the Flash family only (Pro retired).
-// Keep in sync with AI_MODELS in components/operations/AppSettingsDialog.tsx.
-export const DEFAULT_AI_MODEL = 'gemini-3.8-flash';
-const SUPPORTED_AI_MODELS = new Set([
-  DEFAULT_AI_MODEL,
-  'gemini-3.7-flash',
-  'gemini-3.6-flash',
-  'gemini-3.5-flash',
-  'gemini-3.5-flash-lite',
-  'gemini-3.1-flash-lite',
-  'gemini-3-flash-preview',
-  'gemini-2.5-flash',
-  'gemini-2.0-flash',
-]);
 
 export const useUIStore = create<UIState>()(
   persist(
@@ -108,8 +90,7 @@ export const useUIStore = create<UIState>()(
       autoFetchOnOpen: true,
       demoMode: false,
       aiEnabled: false,
-      aiApiKey: '',
-      aiModel: DEFAULT_AI_MODEL,
+      aiConfigured: false,
       backgroundSmartCommit: false,
       backgroundSmartCommitPush: false,
 
@@ -151,23 +132,21 @@ export const useUIStore = create<UIState>()(
       setAutoFetchOnOpen: (v: boolean) => set({ autoFetchOnOpen: v }),
       setDemoMode: (v: boolean) => set({ demoMode: v }),
       setAiEnabled: (v: boolean) => set({ aiEnabled: v }),
-      setAiApiKey: (key: string) => set({ aiApiKey: key }),
-      setAiModel: (model: string) => set({ aiModel: model }),
       setBackgroundSmartCommit: (v: boolean) => set({ backgroundSmartCommit: v }),
       setBackgroundSmartCommitPush: (v: boolean) => set({ backgroundSmartCommitPush: v }),
     }),
     {
       name: 'sikagit-ui',
-      version: 3,
+      version: 4,
+      partialize: ({aiConfigured, aiEnabled, ...state}) => state,
       // v1/v2: the diff font default dropped 12px -> 11px -> 10px; carry users
       // still on a previous default over, keep explicit choices.
-      // v3: the Gemini Pro models were retired; anything not in the supported
-      // Flash list becomes the current default.
+      // v4: remove legacy browser-held provider credentials and AI configuration.
       migrate: (persisted, version) => {
-        const state = persisted as Partial<UIState>;
+        const state = persisted as Partial<UIState> & {aiApiKey?:string;aiModel?:string};
         if (version < 1 && state.diffFontSize === 12) state.diffFontSize = 11;
         if (version < 2 && state.diffFontSize === 11) state.diffFontSize = 10;
-        if (version < 3 && !SUPPORTED_AI_MODELS.has(state.aiModel ?? '')) state.aiModel = DEFAULT_AI_MODEL;
+        delete state.aiApiKey; delete state.aiEnabled; delete state.aiModel;
         return state as UIState;
       },
     }

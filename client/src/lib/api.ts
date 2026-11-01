@@ -210,26 +210,29 @@ export const api = {
     body: JSON.stringify({ repo, setUpstream, upToCommit, force }),
   }),
 
+  aiSettings: () => request<AISettings>('/ai/settings'),
+  aiSaveSettings: (settings: AISettings & {apiKey?:string;removeKey?:boolean}) => request<AISettings>('/ai/settings',{method:'PUT',body:JSON.stringify(settings)}),
+  aiTest: () => request<{ok:boolean}>('/ai/test',{method:'POST',body:'{}'}),
   // AI
-  aiSuggest: (repo: string, apiKey: string, model: string) =>
+  aiSuggest: (repo: string) =>
     request<{ title: string; description: string }>('/ai/suggest', {
       method: 'POST',
-      body: JSON.stringify({ repo, apiKey, model }),
+      body: JSON.stringify({ repo }),
     }),
-  aiSuggestSaveForLater: (repo: string, apiKey: string, model: string, files: string[]) =>
+  aiSuggestSaveForLater: (repo: string, files: string[]) =>
     request<{ branchName: string; message: string }>('/ai/suggest-save-for-later', {
       method: 'POST',
-      body: JSON.stringify({ repo, apiKey, model, files }),
+      body: JSON.stringify({ repo, files }),
     }),
-  aiSmartCommitPreview: (repo: string, apiKey: string, model: string) =>
-    request<{ groups: { files: string[]; title: string; description: string }[] }>('/ai/smart-commit/preview', {
+  aiSmartCommitPreview: (repo: string) =>
+    request<{ planId: string; groups: { files: string[]; title: string; description: string }[] }>('/ai/smart-commit/preview', {
       method: 'POST',
-      body: JSON.stringify({ repo, apiKey, model }),
+      body: JSON.stringify({ repo }),
     }),
-  aiSmartCommitExecute: (repo: string, groups: { files: string[]; title: string; description: string }[]) =>
+  aiSmartCommitExecute: (repo: string, groups: { files: string[]; title: string; description: string }[], planId: string) =>
     request<{ commits: { hash: string; message: string }[] }>('/ai/smart-commit/execute', {
       method: 'POST',
-      body: JSON.stringify({ repo, groups }),
+      body: JSON.stringify({ repo, groups, planId }),
     }),
 
   // Browse — resolve a folder name + file fingerprint to an absolute server path
@@ -239,3 +242,5 @@ export const api = {
       body: JSON.stringify({ folderName, files }),
     }),
 };
+
+export interface AISettings { revision:string; enabled:boolean; provider:string; model:string; hasApiKey:boolean; language:'en'|'es'|'auto'; conventionalCommits:boolean; maxDiffChars:number; maxOutputTokens:number; responseMode:'structured'|'json'; }

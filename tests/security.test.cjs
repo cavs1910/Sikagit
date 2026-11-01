@@ -18,7 +18,8 @@ fs.writeFileSync(path.join(repo,'tracked.txt'),'original\n');git('add','.');git(
 const sec = require('/app/server/dist/server/src/security.js');
 const services = require('/app/server/dist/server/src/services/gitService.js');
 const headers = {Authorization:'Basic '+Buffer.from('audit:'+password).toString('base64'),'Content-Type':'application/json'};
-const child = spawn(process.execPath,['/app/server/dist/server/src/index.js'],{env:process.env,stdio:['ignore','ignore','pipe']});
+const fixtureFile=path.join(tmp,'ai-fixture.json'); process.env.AI_TEST_FIXTURE=fixtureFile;
+const child = spawn(process.execPath,['--require','/tests/ai-provider-mock.cjs','/app/server/dist/server/src/index.js'],{env:process.env,stdio:['ignore','ignore','pipe']});
 let logs='';child.stderr.on('data',d=>{logs+=d;});
 const ready = (async()=>{for(let i=0;i<100;i++){try{const r=await fetch(base+'/api/v1/health',{headers});if(r.ok)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error('Server did not start: '+logs.slice(-1000));})();
 async function request(route,body,extra={}){await ready;return fetch(base+route,{method:body===undefined?'GET':'POST',headers:{...headers,...extra},body:body===undefined?undefined:JSON.stringify(body)});}
@@ -44,8 +45,8 @@ test('authenticated Socket.IO accepts the signed session cookie',async()=>{
  const r=await request('/api/v1/health');const cookie=r.headers.get('set-cookie').split(';')[0];
  const s=await fetch(base+'/socket.io/?EIO=4&transport=polling',{headers:{Cookie:cookie,Origin:base}});assert.equal(s.status,200);assert.match(await s.text(),/^0\{/);
 });
-test('AI and foreign remote/config commands stay disabled',async()=>{
- assert.equal((await request('/api/v1/ai/suggest',{repo})).status,403);
+test('unconfigured AI and foreign remote/config commands are blocked',async()=>{
+ assert.equal((await request('/api/v1/ai/suggest',{repo})).status,400);
  assert.equal((await request('/api/v1/git/config',{repo,key:'core.sshCommand',value:'touch /tmp/injected'})).ok,false);
  assert.equal((await request('/api/v1/git/remote-url',{repo,url:'ext::sh -c true'})).ok,false);
 });
@@ -125,4 +126,77 @@ test('file response keeps an active SVG in a sandbox without script permissions'
  fs.writeFileSync(path.join(repo,'active.svg'),'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>');
  const r=await request('/api/v1/git/file?repo='+encodeURIComponent(repo)+'&file=active.svg');
  assert.equal(r.status,200);assert.match(r.headers.get('content-security-policy'),/sandbox/);assert.match(r.headers.get('content-security-policy'),/default-src 'none'/);assert.equal(r.headers.get('x-content-type-options'),'nosniff');
+});
+
+async function aiSettings(change={}) {
+ const prior=await (await request('/api/v1/ai/settings')).json();
+ const response=await fetch(base+'/api/v1/ai/settings',{method:'PUT',headers,body:JSON.stringify({...prior.data,...change})});
+ return {response,data:await response.json()};
+}
+function aiOutput(output,status) {fs.writeFileSync(fixtureFile,JSON.stringify({output,status,secret:'fake-private-marker'}));}
+test('AI keys are encrypted, never returned, and cannot silently cross providers',async()=>{
+ const key='fake-test-key-'+crypto.randomBytes(16).toString('hex');
+ const {response,data}=await aiSettings({apiKey:key,provider:'openai',model:'test-model',enabled:true});
+ assert.equal(response.status,200);assert.equal(data.data.hasApiKey,true);assert.equal(JSON.stringify(data).includes(key),false);
+ const disk=fs.readFileSync(path.join(tmp,'data/ai-settings.json'),'utf8');assert.equal(disk.includes(key),false);
+ assert.equal(fs.statSync(path.join(tmp,'data/ai-settings.key')).mode&0o777,0o600);
+ assert.equal((await aiSettings({language:'en'})).data.data.hasApiKey,true);
+ assert.equal((await aiSettings({provider:'anthropic'})).response.status,400);
+ assert.equal((await aiSettings({provider:'openai',baseURL:'http://127.0.0.1/'})).data.data.baseURL,undefined);
+});
+test('AI SDK connection, messages, shelving and safe provider errors',async()=>{
+ aiOutput({ok:true});assert.equal((await request('/api/v1/ai/test',{})).status,200);
+ fs.writeFileSync(path.join(repo,'tracked.txt'),'AI staged\n');git('add','tracked.txt');
+ aiOutput({title:'fix: preserve staged changes',description:'Keep exact index content.'});
+ const message=await (await request('/api/v1/ai/suggest',{repo,apiKey:'ignored',model:'ignored'})).json();assert.equal(message.data.title,'fix: preserve staged changes');
+ aiOutput({branchName:'save/staged-changes',message:'Save staged changes\n\nChanges: update tracked file. Context: deferred.'});
+ assert.equal((await request('/api/v1/ai/suggest-save-for-later',{repo,files:['tracked.txt']})).status,200);
+ assert.equal((await request('/api/v1/ai/suggest-save-for-later',{repo,files:['../auth.json']})).status,400);
+ aiOutput({},401);const failure=await request('/api/v1/ai/test',{});const text=await failure.text();assert.equal(failure.status,400);assert.match(text,/API key/);assert.equal(text.includes('fake-private-marker'),false);
+ git('reset','--hard','HEAD');
+});
+test('Smart Commit rejects stale, duplicate and invented paths and preserves partial staging',async()=>{
+ fs.writeFileSync(path.join(repo,'tracked.txt'),'index only\n');git('add','tracked.txt');fs.writeFileSync(path.join(repo,'tracked.txt'),'index only plus unstaged\n');
+ fs.writeFileSync(path.join(repo,'second.txt'),'second index\n');git('add','second.txt');
+ const groups=[{files:['tracked.txt'],title:'fix: first group',description:''},{files:['second.txt'],title:'feat: second group',description:''}];
+ aiOutput({groups});let preview=await (await request('/api/v1/ai/smart-commit/preview',{repo})).json();assert.ok(preview.data?.planId,JSON.stringify(preview));
+ const start=git('rev-parse','HEAD');
+ assert.equal((await request('/api/v1/ai/smart-commit/execute',{repo,planId:preview.data.planId,groups:[{...groups[0],files:['../auth.json']},groups[1]]})).status,400);
+ assert.equal((await request('/api/v1/ai/smart-commit/execute',{repo,planId:preview.data.planId,groups:[groups[0],groups[0]]})).status,400);
+ assert.equal(git('rev-parse','HEAD'),start);
+ fs.writeFileSync(path.join(repo,'second.txt'),'changed index\n');git('add','second.txt');
+ assert.equal((await request('/api/v1/ai/smart-commit/execute',{repo,planId:preview.data.planId,groups})).status,400);
+ preview=await (await request('/api/v1/ai/smart-commit/preview',{repo})).json();
+ const result=await (await request('/api/v1/ai/smart-commit/execute',{repo,planId:preview.data.planId,groups})).json();assert.equal(result.data?.commits.length,2,JSON.stringify(result));
+ assert.equal(git('show','HEAD:tracked.txt'),'index only');assert.equal(fs.readFileSync(path.join(repo,'tracked.txt'),'utf8'),'index only plus unstaged\n');assert.equal(git('diff','--cached'),'');
+ assert.equal((await request('/api/v1/ai/smart-commit/execute',{repo,planId:preview.data.planId,groups})).status,400);
+ git('reset','--hard','HEAD');
+});
+test('JSON compatibility mode works through OpenRouter and removing a key disables generation',async()=>{
+ assert.equal((await aiSettings({provider:'openrouter',apiKey:'fake-router-key',responseMode:'json'})).response.status,200);
+ aiOutput({ok:true});assert.equal((await request('/api/v1/ai/test',{})).status,200);
+ assert.equal((await aiSettings({enabled:false,removeKey:true})).data.data.hasApiKey,false);
+ assert.equal((await request('/api/v1/ai/test',{})).status,400);
+});
+test('Smart Commit includes rename sources and deletions without leaving staged paths behind',async()=>{
+ await aiSettings({provider:'openai',apiKey:'fake-openai-key',model:'test-model',enabled:true,responseMode:'structured'});
+ git('mv','tracked.txt','renamed.txt');git('rm','second.txt');
+ const groups=[{files:['tracked.txt','renamed.txt'],title:'refactor: rename tracked file',description:''},{files:['second.txt'],title:'chore: remove second file',description:''}];aiOutput({groups});
+ const preview=await (await request('/api/v1/ai/smart-commit/preview',{repo})).json();assert.ok(preview.data?.planId,JSON.stringify(preview));
+ const response=await (await request('/api/v1/ai/smart-commit/execute',{repo,groups,planId:preview.data.planId})).json();assert.equal(response.data?.commits.length,2,JSON.stringify(response));assert.equal(git('diff','--cached'),'');assert.equal(git('ls-files'),'literal;$(touch injected).txt\nrenamed.txt');
+ await aiSettings({enabled:false,removeKey:true});
+});
+test('stale settings revisions cannot overwrite another device configuration',async()=>{
+ const old=await (await request('/api/v1/ai/settings')).json();await aiSettings({language:'es'});
+ const r=await fetch(base+'/api/v1/ai/settings',{method:'PUT',headers,body:JSON.stringify({...old.data,language:'auto'})});assert.equal(r.status,400);assert.match(await r.text(),/another device/);
+});
+
+test('AI grouping treats wildcard filenames as literal paths',async()=>{
+ await aiSettings({provider:'openai',apiKey:'fake-openai-key',model:'test-model',enabled:true,responseMode:'structured'});
+ const names=['special[1].txt','special1.txt'];for(const f of names)fs.writeFileSync(path.join(repo,f),'literal index\n');git('--literal-pathspecs','add','--',...names);
+ const groups=names.map((f,i)=>({files:[f],title:'test: literal group '+i,description:''}));aiOutput({groups});
+ const preview=await (await request('/api/v1/ai/smart-commit/preview',{repo})).json();
+ const response=await (await request('/api/v1/ai/smart-commit/execute',{repo,groups,planId:preview.data.planId})).json();assert.equal(response.data?.commits.length,2,JSON.stringify(response));
+ assert.equal(git('diff-tree','--no-commit-id','--name-only','-r','HEAD~1'),'special[1].txt');assert.equal(git('diff-tree','--no-commit-id','--name-only','-r','HEAD'),'special1.txt');
+ await aiSettings({enabled:false,removeKey:true});
 });

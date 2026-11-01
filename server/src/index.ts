@@ -1,3 +1,4 @@
+import aiRoutes from './routes/ai';
 import { accessGuard } from './security';
 import express from 'express';
 import cors from 'cors';
@@ -46,7 +47,7 @@ app.use('/api/v1/repos', reposRouter);
 app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/git', gitRouter);
 app.use('/api/v1/browse', browseRouter);
-app.use('/api/v1/ai', (_req, res) => { res.status(403).json({ success: false, error: 'External AI integration disabled on this installation' }); });
+app.use('/api/v1/ai', aiRoutes);
 
 // Health check
 app.get('/api/v1/health', (_req, res) => {

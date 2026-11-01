@@ -19,7 +19,7 @@ export interface SmartCommitOutcome {
   pushed: boolean;
   /** Push was requested but failed (commits still exist locally). */
   pushError?: string;
-  /** Execute failed — nothing was committed. */
+  /** Execute failed; the server error states whether any commits were created. */
   error?: string;
   /** Preview/analysis failed or produced no groups (background path only). */
   previewError?: string;
@@ -33,11 +33,11 @@ export interface SmartCommitOutcome {
 export async function executeSmartCommit(
   repoPath: string,
   groups: SmartCommitGroup[],
-  opts: { push: boolean; setUpstream: boolean },
+  opts: { push: boolean; setUpstream: boolean; planId: string },
 ): Promise<SmartCommitOutcome> {
   let commitCount = 0;
   try {
-    const res = await api.aiSmartCommitExecute(repoPath, groups);
+    const res = await api.aiSmartCommitExecute(repoPath, groups, opts.planId);
     commitCount = res.commits?.length ?? 0;
   } catch (err: any) {
     return { ok: false, commitCount: 0, pushed: false, error: err?.message || 'Smart commit failed' };
@@ -61,12 +61,14 @@ export async function executeSmartCommit(
  */
 export async function runBackgroundSmartCommit(
   repoPath: string,
-  opts: { apiKey: string; model: string; push: boolean; setUpstream: boolean },
+  opts: { push: boolean; setUpstream: boolean },
 ): Promise<SmartCommitOutcome> {
   let groups: SmartCommitGroup[];
+  let planId: string;
   try {
-    const preview = await api.aiSmartCommitPreview(repoPath, opts.apiKey, opts.model);
+    const preview = await api.aiSmartCommitPreview(repoPath);
     groups = preview.groups;
+    planId = preview.planId;
   } catch (err: any) {
     return { ok: false, commitCount: 0, pushed: false, previewError: err?.message || 'Failed to analyze changes' };
   }
@@ -75,7 +77,7 @@ export async function runBackgroundSmartCommit(
     return { ok: false, commitCount: 0, pushed: false, previewError: 'No changes to commit' };
   }
 
-  return executeSmartCommit(repoPath, groups, { push: opts.push, setUpstream: opts.setUpstream });
+  return executeSmartCommit(repoPath, groups, { push: opts.push, setUpstream: opts.setUpstream, planId });
 }
 
 /** Human-readable summary of a successful run, e.g. "Created 3 commits and pushed". */
