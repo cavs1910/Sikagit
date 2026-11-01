@@ -169,7 +169,6 @@ export function AISettingsPanel() {
               update({ language: e.target.value as AISettings["language"] })
             }
           >
-            <option value="es">Español</option>
             <option value="en">English</option>
             <option value="auto">Match project</option>
           </select>

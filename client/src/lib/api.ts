@@ -250,4 +250,4 @@ export const api = {
     }),
 };
 
-export interface AISettings { revision:string; enabled:boolean; provider:string; model:string; hasApiKey:boolean; language:'en'|'es'|'auto'; conventionalCommits:boolean; maxDiffChars:number; maxOutputTokens:number; responseMode:'structured'|'json'; }
+export interface AISettings { revision:string; enabled:boolean; provider:string; model:string; hasApiKey:boolean; language:'en'|'auto'; conventionalCommits:boolean; maxDiffChars:number; maxOutputTokens:number; responseMode:'structured'|'json'; }

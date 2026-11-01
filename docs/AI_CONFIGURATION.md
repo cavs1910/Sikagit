@@ -4,7 +4,7 @@ Open **Settings → AI** in SikaGit. Select a provider, search the model catalog
 
 Supported providers: OpenAI, Anthropic, Google Gemini, OpenRouter, Groq, DeepSeek, Mistral and xAI. OpenRouter exposes models from many additional vendors using their catalog IDs. These are direct provider integrations through Vercel AI SDK; no Vercel account or AI Gateway is used. Model availability and charges depend on your provider account. Models must support text generation; structured output mode additionally requires JSON schema support. Select **JSON text compatibility** for models without it.
 
-Settings are shared across devices. Choose Spanish, English or project language, conventional titles, diff size and output token limits. Background Smart Commit and automatic push remain per-device preferences and default off. Normal Smart Commit previews remain editable before execution. Commit suggestions and save-for-later suggestions are retained.
+Settings are shared across devices. Choose English or Match project (the default), conventional titles, diff size and output token limits. Background Smart Commit and automatic push remain per-device preferences and default off. Normal Smart Commit previews remain editable before execution. Commit suggestions and save-for-later suggestions are retained.
 
 ## Secrets and privacy
 
@@ -45,3 +45,5 @@ The public catalog is cached in memory and `$DATA_DIR/ai-model-catalog.json`. A 
 Displayed rates are baseline text-token prices. Long-context tiers, caching, reasoning, routing, free-tier limits, discounts, taxes and provider policy can affect actual charges. Verify the provider pricing link before relying on a rate.
 
 Catalog validation on 2026-11-01: all 35 production-image regression cases and nine browser checks pass. Tests cover price-unit conversion, free versus unknown rates, text/retired-model filtering, authenticated access, fixed provider selection, offline fallback, persisted cache, refresh recovery/throttling, absence of API-key transmission, UI search/sorting/selection and saved model IDs. Backend and Vite builds pass; the frontend retains the same 35 pre-existing TypeScript diagnostics.
+
+Suggestion language supports **English** and **Match project** only. New installations default to Match project; legacy Spanish or missing language settings normalize to Match project without changing saved credentials. Existing English preferences are preserved.

@@ -22,7 +22,7 @@ const schema = z.object({
   enabled: z.boolean(),
   provider: z.enum(providers),
   model: z.string().trim().max(200),
-  language: z.enum(["en", "es", "auto"]),
+  language: z.enum(["en", "auto"]),
   conventionalCommits: z.boolean(),
   maxDiffChars: z.number().int().min(2000).max(100000),
   maxOutputTokens: z.number().int().min(256).max(8192),
@@ -37,7 +37,7 @@ const defaults = {
   enabled: false,
   provider: "openai" as (typeof providers)[number],
   model: "",
-  language: "es" as "en" | "es" | "auto",
+  language: "auto" as "en" | "auto",
   conventionalCommits: true,
   maxDiffChars: 30000,
   maxOutputTokens: 2048,
@@ -46,7 +46,9 @@ const defaults = {
 type Settings = typeof defaults & { secret?: string };
 function read(): Settings {
   try {
-    return JSON.parse(fs.readFileSync(filename, "utf8"));
+    const saved = JSON.parse(fs.readFileSync(filename, "utf8"));
+    // Legacy Spanish settings become project language without touching encrypted keys.
+    return { ...saved, language: saved.language === "en" ? "en" : "auto" };
   } catch (e: any) {
     if (e.code === "ENOENT") return { ...defaults };
     throw new Error("Cannot read AI settings");

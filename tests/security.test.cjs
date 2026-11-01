@@ -187,7 +187,7 @@ test('Smart Commit includes rename sources and deletions without leaving staged 
  await aiSettings({enabled:false,removeKey:true});
 });
 test('stale settings revisions cannot overwrite another device configuration',async()=>{
- const old=await (await request('/api/v1/ai/settings')).json();await aiSettings({language:'es'});
+ const old=await (await request('/api/v1/ai/settings')).json();await aiSettings({language:'auto'});
  const r=await fetch(base+'/api/v1/ai/settings',{method:'PUT',headers,body:JSON.stringify({...old.data,language:'auto'})});assert.equal(r.status,400);assert.match(await r.text(),/another device/);
 });
 
@@ -276,4 +276,17 @@ test('catalog refresh recovers from stale persisted data and retains cache when 
   delete require.cache[require.resolve(filename)];const failed=require(filename);global.fetch=async()=>{throw new Error('upstream outage with fake secret marker');};
   const fallback=await failed.getModelCatalog('openai',true);assert.equal(fallback.sourceType,'cache');assert.equal(fallback.models[0].id,'fresh-model');assert.match(fallback.warning,/unavailable/i);assert.equal(JSON.stringify(fallback).includes('fake secret marker'),false);
  }finally{global.fetch=original;}
+});
+
+test('AI language defaults to project language and migrates legacy Spanish without changing keys',async()=>{
+ const settings=require('/app/server/dist/server/src/services/aiSettings.js');const filename=path.join(tmp,'data/ai-settings.json');const previous=fs.readFileSync(filename,'utf8');
+ try {
+  fs.unlinkSync(filename);assert.equal(settings.publicSettings().language,'auto');
+  settings.saveSettings({...settings.publicSettings(),apiKey:'fake-migration-key',enabled:false});
+  const legacy={...JSON.parse(fs.readFileSync(filename,'utf8')),language:'es'};fs.writeFileSync(filename,JSON.stringify(legacy));
+  assert.equal(settings.publicSettings().language,'auto');assert.equal(JSON.parse(fs.readFileSync(filename,'utf8')).secret,legacy.secret);
+  const response=await aiSettings({language:'auto'});assert.equal(response.response.status,200);assert.equal(JSON.parse(fs.readFileSync(filename,'utf8')).language,'auto');assert.equal(JSON.parse(fs.readFileSync(filename,'utf8')).secret,legacy.secret);
+  assert.equal((await aiSettings({language:'es'})).response.status,400);
+  assert.equal((await aiSettings({language:'en'})).data.data.language,'en');
+ }finally{fs.writeFileSync(filename,previous);}
 });
