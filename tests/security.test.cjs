@@ -200,3 +200,46 @@ test('AI grouping treats wildcard filenames as literal paths',async()=>{
  assert.equal(git('diff-tree','--no-commit-id','--name-only','-r','HEAD~1'),'special[1].txt');assert.equal(git('diff-tree','--no-commit-id','--name-only','-r','HEAD'),'special1.txt');
  await aiSettings({enabled:false,removeKey:true});
 });
+
+const editorUrl=(endpoint,file,extra={})=>base+'/api/v1/editor/'+endpoint+'?'+new URLSearchParams({repo,...(file===undefined?{}:{file}),...extra});
+async function editorRead(file){await ready;return fetch(editorUrl('file',file),{headers});}
+async function editorSave(file,content,revision){await ready;return fetch(base+'/api/v1/editor/file',{method:'PUT',headers,body:JSON.stringify({repo,file,content,revision})});}
+test('editor explorer includes unchanged files, respects ignores and always hides Git metadata',async()=>{
+ fs.writeFileSync(path.join(repo,'.gitignore'),'editor-ignored/\n');fs.mkdirSync(path.join(repo,'editor-ignored'));fs.writeFileSync(path.join(repo,'editor-ignored/hidden.txt'),'hidden');
+ fs.mkdirSync(path.join(repo,'editor-directory'));fs.writeFileSync(path.join(repo,'editor-directory/unchanged.txt'),'unchanged');
+ git('--literal-pathspecs','add','--','editor-directory/unchanged.txt');git('commit','-qm','editor fixture');
+ let result=await (await fetch(editorUrl('tree',undefined),{headers})).json();assert.ok(result.data.some(e=>e.name==='editor-directory'&&e.type==='directory'));assert.equal(result.data.some(e=>e.name==='.git'||e.name==='editor-ignored'),false);
+ result=await (await fetch(editorUrl('tree',undefined,{showIgnored:'true'}),{headers})).json();assert.equal(result.data.some(e=>e.name==='editor-ignored'),true);assert.equal(result.data.some(e=>e.name==='.git'),false);
+ result=await (await fetch(editorUrl('tree',undefined,{directory:'editor-directory'}),{headers})).json();assert.equal(result.data[0].path,'editor-directory/unchanged.txt');
+ assert.equal((await fetch(editorUrl('tree',undefined,{directory:'.git'}),{headers})).status,400);
+});
+test('editor saves exact UTF-8, BOM and CRLF content atomically without staging',async()=>{
+ const file='editor-directory/utf8.txt';const original='\ufefflínea uno\r\n第二行\r\n';fs.writeFileSync(path.join(repo,file),original);fs.chmodSync(path.join(repo,file),0o640);
+ const initial=await (await editorRead(file)).json();assert.equal(initial.data.content,original);assert.equal(initial.data.lineEnding,'crlf');assert.match(initial.data.revision,/^[a-f0-9]{64}$/);
+ const cachedBefore=git('diff','--cached');const content=original+'otra línea\r\n';
+ const response=await editorSave(file,content,initial.data.revision);const saved=await response.json();assert.equal(response.status,200,JSON.stringify(saved));assert.equal(fs.readFileSync(path.join(repo,file),'utf8'),content);assert.equal(saved.data.content,content);assert.notEqual(saved.data.revision,initial.data.revision);assert.equal(fs.statSync(path.join(repo,file)).mode&0o777,0o640);assert.equal(git('diff','--cached'),cachedBefore);
+ const metadata=await (await fetch(editorUrl('file',file,{metadata:'true'}),{headers})).json();assert.equal(metadata.data.revision,saved.data.revision);assert.equal('content' in metadata.data,false);
+ assert.equal(fs.readdirSync(path.join(repo,'editor-directory')).some(f=>f.startsWith('.sikagit-edit-')),false);
+});
+test('editor rejects stale and simultaneous saves without overwriting external changes',async()=>{
+ const file='editor-directory/conflict.txt';fs.writeFileSync(path.join(repo,file),'initial\n');let initial=await (await editorRead(file)).json();fs.writeFileSync(path.join(repo,file),'external update\n');
+ const rejected=await editorSave(file,'stale browser draft\n',initial.data.revision);assert.equal(rejected.status,409);assert.equal(fs.readFileSync(path.join(repo,file),'utf8'),'external update\n');
+ initial=await (await editorRead(file)).json();const results=await Promise.all([editorSave(file,'first\n',initial.data.revision),editorSave(file,'second\n',initial.data.revision)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,409]);assert.ok(['first\n','second\n'].includes(fs.readFileSync(path.join(repo,file),'utf8')));
+});
+test('editor rejects metadata, traversal, symlinks, hard links, binaries and invalid encodings',async()=>{
+ const dir=path.join(repo,'editor-directory');fs.writeFileSync(path.join(dir,'plain.txt'),'plain');fs.symlinkSync(path.join(dir,'plain.txt'),path.join(dir,'link.txt'));fs.symlinkSync(dir,path.join(repo,'editor-linked-directory'));fs.linkSync(path.join(dir,'plain.txt'),path.join(dir,'hardlink.txt'));
+ fs.writeFileSync(path.join(dir,'binary.bin'),Buffer.from([0,1,2]));fs.writeFileSync(path.join(dir,'invalid.txt'),Buffer.from([0xff,0xfe]));fs.writeFileSync(path.join(dir,'mixed.txt'),'a\r\nb\nc');
+ for(const file of ['../auth.json','/etc/passwd','.git/config','editor-directory/link.txt','editor-linked-directory/plain.txt','editor-directory/hardlink.txt','editor-directory/binary.bin','editor-directory/invalid.txt','editor-directory/mixed.txt','x\nfile','--help'])assert.equal((await editorRead(file)).status,400,file);
+ const tree=await (await fetch(editorUrl('tree',undefined,{directory:'editor-directory'}),{headers})).json();assert.equal(tree.data.find(e=>e.name==='link.txt').type,'blocked');
+ assert.equal((await fetch(editorUrl('tree',undefined,{directory:'editor-linked-directory'}),{headers})).status,400);
+ const forbidden=await editorSave('.git/config','unsafe','a'.repeat(64));assert.equal(forbidden.status,400);
+ fs.unlinkSync(path.join(dir,'hardlink.txt'));
+});
+test('editor bounds file sizes and refuses missing revisions, read-only files and special files',async()=>{
+ const file='editor-directory/bounded.txt';fs.writeFileSync(path.join(repo,file),'small');const initial=await (await editorRead(file)).json();
+ assert.equal((await editorSave(file,'a'.repeat(1024*1024+1),initial.data.revision)).status,413);assert.equal((await editorSave(file,'oops',undefined)).status,400);assert.equal((await editorSave(file,'\0',initial.data.revision)).status,400);
+ fs.chmodSync(path.join(repo,file),0o444);const readOnly=await (await editorRead(file)).json();assert.equal((await editorSave(file,'overwrite',readOnly.data.revision)).status,400);assert.equal(fs.readFileSync(path.join(repo,file),'utf8'),'small');fs.chmodSync(path.join(repo,file),0o644);
+ fs.writeFileSync(path.join(repo,'editor-directory/too-large.txt'),Buffer.alloc(1024*1024+1,65));assert.equal((await editorRead('editor-directory/too-large.txt')).status,413);
+ execFileSync('mkfifo',[path.join(repo,'editor-directory/pipe')]);assert.equal((await editorRead('editor-directory/pipe')).status,400);
+ assert.equal((await editorSave('editor-directory/new-file.txt','not created','a'.repeat(64))).status,400);assert.equal(fs.existsSync(path.join(repo,'editor-directory/new-file.txt')),false);
+});

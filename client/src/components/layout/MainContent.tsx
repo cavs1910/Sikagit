@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { useEffect, useCallback, useState } from 'react';
 import { useRepoStore } from '../../store/repoStore';
 import { useLogStore } from '../../store/logStore';
@@ -21,6 +22,8 @@ import { useRepoStatusStore } from '../../store/repoStatusStore';
 import { shouldAutoFetch, markAutoFetched } from '../../lib/autoFetch';
 import { refreshRepo, whenRepoIdle } from '../../lib/repoRefresh';
 
+const FilesWorkspace = lazy(() => import('../files/FilesWorkspace').then(module => ({ default: module.FilesWorkspace })));
+
 export function MainContent() {
   const repos = useRepoStore(s => s.repos);
   const activeRepoId = useRepoStore(s => s.activeRepoId);
@@ -33,6 +36,8 @@ export function MainContent() {
   const confirm = useConfirmStore(s => s.confirm);
   const repoProject = activeRepoId ? projects.find(p => p.repoIds.includes(activeRepoId)) : undefined;
 
+  const [workspaceTab, setWorkspaceTab] = useState<'git' | 'files'>('git');
+  const [filesOpened, setFilesOpened] = useState(false);
   const [remoteAction, setRemoteAction] = useState<'fetch' | 'pull' | 'push' | null>(null);
   const [showRepoSettings, setShowRepoSettings] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
@@ -407,8 +412,12 @@ export function MainContent() {
         )}
       </div>
 
+      <div className="flex gap-1 px-3 py-1 border-b border-border bg-bg-secondary shrink-0" role="tablist" aria-label="Repository workspace">
+        <button role="tab" aria-selected={workspaceTab==='git'} onClick={()=>setWorkspaceTab('git')} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='git'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>History &amp; Changes</button>
+        <button role="tab" aria-selected={workspaceTab==='files'} onClick={()=>{setFilesOpened(true);setWorkspaceTab('files');}} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='files'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>Files</button>
+      </div>
       {/* Main area: left column (list + staging) | right column (changes full height) */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className={cn("flex-1 flex overflow-hidden min-h-0", workspaceTab !== "git" && "hidden")}>
         {/* Left column */}
         <div
           style={{ width: (selectedCommit || selectedFile) ? commitListWidth : undefined }}
@@ -495,6 +504,8 @@ export function MainContent() {
           </>
         )}
       </div>
+
+      {filesOpened && <div className={cn('flex-1 min-h-0 overflow-hidden',workspaceTab==='files'?'flex':'hidden')}><Suspense fallback={<div className="p-4 text-xs text-text-muted">Loading files…</div>}><FilesWorkspace repoPath={repo.path} visible={workspaceTab==='files'}/></Suspense></div>}
 
       {/* Merge dialog */}
       {showMergeDialog && repo && (

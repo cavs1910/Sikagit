@@ -170,3 +170,7 @@ SikaGit is released under the [Sikasio Source Available License](LICENSE). Free 
 ### Multi-provider AI configuration
 
 Configure your provider, model and API key in **Settings → AI**. Configuration is stored on the server and shared across devices. See [AI configuration and privacy](docs/AI_CONFIGURATION.md).
+
+### Edit repository files
+
+Use the **Files** workspace to browse and edit existing text files directly on the server with CodeMirror 6. Supports tabs, Cmd/Ctrl+S, search and external-change detection. Saving refreshes Git status and leaves staging and committing under your control. See [File editor](docs/FILE_EDITOR.md).

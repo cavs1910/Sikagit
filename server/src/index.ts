@@ -1,3 +1,4 @@
+import editorRoutes from './routes/editor';
 import aiRoutes from './routes/ai';
 import { accessGuard } from './security';
 import express from 'express';
@@ -48,6 +49,7 @@ app.use('/api/v1/projects', projectsRouter);
 app.use('/api/v1/git', gitRouter);
 app.use('/api/v1/browse', browseRouter);
 app.use('/api/v1/ai', aiRoutes);
+app.use('/api/v1/editor', editorRoutes);
 
 // Health check
 app.get('/api/v1/health', (_req, res) => {

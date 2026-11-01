@@ -1,3 +1,4 @@
+import { EditorDraftGuard } from '../files/EditorDraftGuard';
 import { refreshAISettings } from '../../lib/aiSettings';
 import { useEffect, useCallback } from 'react';
 import { Sidebar } from './Sidebar';
@@ -31,6 +32,7 @@ export function AppShell() {
 
   return (
     <div className={cn('flex flex-col h-screen overflow-hidden', demoMode && 'demo-mode')}>
+      <EditorDraftGuard />
       <div className="flex flex-1 overflow-hidden">
         {sidebarOpen && (
           <>

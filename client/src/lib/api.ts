@@ -11,13 +11,19 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const json: ApiResponse<T> = await res.json();
 
   if (!json.success) {
-    throw new Error(json.error || 'Request failed');
+    throw Object.assign(new Error(json.error || 'Request failed'), { status: res.status });
   }
 
   return json.data as T;
 }
 
+export interface DirectoryEntry { name:string; path:string; type:'directory'|'file'|'blocked'; }
+export interface TextFile { content:string; revision:string; lineEnding:'lf'|'crlf'; }
 export const api = {
+  editorTree: (repo:string,directory='',showIgnored=false) => request<DirectoryEntry[]>('/editor/tree?'+new URLSearchParams({repo,directory,showIgnored:String(showIgnored)})),
+  editorRead: (repo:string,file:string) => request<TextFile>('/editor/file?'+new URLSearchParams({repo,file})),
+  editorRevision: (repo:string,file:string) => request<{revision:string}>('/editor/file?'+new URLSearchParams({repo,file,metadata:'true'})),
+  editorSave: (repo:string,file:string,content:string,revision:string) => request<TextFile>('/editor/file',{method:'PUT',body:JSON.stringify({repo,file,content,revision})}),
   // Repos
   getRepos: () => request<import('@sikagit/shared').RepoBookmark[]>('/repos'),
   addRepo: (path: string) => request<import('@sikagit/shared').RepoBookmark>('/repos', {

@@ -1,0 +1,433 @@
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import {
+  ChevronRight,
+  ChevronDown,
+  FileText,
+  Folder,
+  RefreshCw,
+  Save,
+  X,
+  Search,
+  AlertTriangle,
+  Loader2,
+  Copy,
+} from "lucide-react";
+import { api, type DirectoryEntry } from "../../lib/api";
+import { useEditorStore, isDirty } from "../../store/editorStore";
+import { useConfirmStore } from "../../store/confirmStore";
+import { useStatusStore } from "../../store/statusStore";
+import { useRepoStatusStore } from "../../store/repoStatusStore";
+import { useRepoStore } from "../../store/repoStore";
+import { useToastStore } from "../../store/toastStore";
+import { cn } from "../../lib/utils";
+const CodeEditor = lazy(() => import("./CodeEditor"));
+function Directory({
+  repo,
+  directory,
+  showIgnored,
+  refresh,
+  depth,
+  filter,
+}: {
+  repo: string;
+  directory: string;
+  showIgnored: boolean;
+  refresh: number;
+  depth: number;
+  filter: string;
+}) {
+  const [entries, setEntries] = useState<DirectoryEntry[]>([]),
+    [opened, setOpened] = useState<Set<string>>(new Set()),
+    [loading, setLoading] = useState(true),
+    [error, setError] = useState("");
+  const selected = useEditorStore((s) => s.selected[repo]);
+  const open = useEditorStore((s) => s.open);
+  const toast = useToastStore((s) => s.addToast);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    api
+      .editorTree(repo, directory, showIgnored)
+      .then((items) => {
+        if (!cancelled) setEntries(items);
+      })
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [repo, directory, showIgnored, refresh]);
+  if (loading)
+    return <div className="p-2 text-xs text-text-muted">Loading…</div>;
+  if (error)
+    return (
+      <p role="alert" className="p-2 text-xs text-danger">
+        {error}
+      </p>
+    );
+  if (!entries.length)
+    return <p className="px-3 py-2 text-xs text-text-muted">Empty folder</p>;
+  return (
+    <div>
+      {entries
+        .filter(
+          (entry) =>
+            entry.type === "directory" ||
+            !filter ||
+            entry.name.toLowerCase().includes(filter.toLowerCase()),
+        )
+        .map((entry) => (
+          <div key={entry.path}>
+            <button
+              title={
+                entry.type === "blocked"
+                  ? "Symlinks and special files are not editable"
+                  : entry.path
+              }
+              disabled={entry.type === "blocked"}
+              onClick={() =>
+                entry.type === "directory"
+                  ? setOpened((previous) => {
+                      const next = new Set(previous);
+                      next.has(entry.path)
+                        ? next.delete(entry.path)
+                        : next.add(entry.path);
+                      return next;
+                    })
+                  : void open(repo, entry.path).catch((e) =>
+                      toast("error", e.message),
+                    )
+              }
+              className={cn(
+                "w-full flex items-center gap-1.5 py-1.5 pr-2 text-xs text-left hover:bg-bg-tertiary disabled:opacity-40",
+                selected === JSON.stringify([repo, entry.path]) &&
+                  "bg-accent/10 text-accent",
+              )}
+              style={{ paddingLeft: 10 + depth * 14 }}
+            >
+              {entry.type === "directory" ? (
+                opened.has(entry.path) ? (
+                  <ChevronDown size={12} />
+                ) : (
+                  <ChevronRight size={12} />
+                )
+              ) : (
+                <span className="w-3 shrink-0" />
+              )}
+              {entry.type === "directory" ? (
+                <Folder size={14} className="text-accent shrink-0" />
+              ) : (
+                <FileText size={14} className="text-text-muted shrink-0" />
+              )}
+              <span className="truncate">{entry.name}</span>
+            </button>
+            {entry.type === "directory" && opened.has(entry.path) && (
+              <Directory
+                repo={repo}
+                directory={entry.path}
+                showIgnored={showIgnored}
+                refresh={refresh}
+                depth={depth + 1}
+                filter={filter}
+              />
+            )}
+          </div>
+        ))}
+    </div>
+  );
+}
+export function FilesWorkspace({
+  repoPath,
+  visible,
+}: {
+  repoPath: string;
+  visible: boolean;
+}) {
+  const { documents, selected, open, reload, save, check, close } =
+    useEditorStore();
+  const key = selected[repoPath] || "";
+  const doc = documents[key];
+  const tabs = Object.entries(documents).filter(
+    ([, item]) => item.repo === repoPath,
+  );
+  const [showIgnored, setShowIgnored] = useState(false),
+    [refresh, setRefresh] = useState(0),
+    [filter, setFilter] = useState(""),
+    [showTree, setShowTree] = useState(true);
+  const confirm = useConfirmStore((s) => s.confirm),
+    toast = useToastStore((s) => s.addToast);
+  const saveCurrent = useCallback(async () => {
+    if (!key) return;
+    const before = useEditorStore.getState().documents[key];
+    if (!before || !isDirty(before)) return;
+    if (await save(key)) {
+      toast("success", "Saved " + before.file);
+      if (useRepoStore.getState().activeRepo()?.path === before.repo)
+        void useStatusStore.getState().fetchStatus(before.repo);
+      const repo = useRepoStore
+        .getState()
+        .repos.find((r) => r.path === before.repo);
+      if (repo) void useRepoStatusStore.getState().forceRefreshOne(repo);
+    }
+  }, [key, save, toast]);
+  useEffect(() => {
+    if (!visible || !key) return;
+    const poll = () => {
+      if (!document.hidden) void check(key);
+    };
+    poll();
+    const timer = window.setInterval(poll, 6000);
+    window.addEventListener("focus", poll);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener("focus", poll);
+    };
+  }, [visible, key, check]);
+  const reloadCurrent = async () => {
+    if (!doc || doc.loading || doc.saving) return;
+    if (
+      isDirty(doc) &&
+      !(await confirm({
+        title: "Reload file?",
+        message:
+          "Discard your unsaved draft and load the current file from the server?",
+        confirmLabel: "Discard draft and reload",
+        variant: "warning",
+      }))
+    )
+      return;
+    void reload(key);
+  };
+  const closeTab = async (tabKey: string) => {
+    const target = documents[tabKey];
+    if (target.loading || target.saving) return;
+    if (
+      isDirty(target) &&
+      !(await confirm({
+        title: "Close unsaved file?",
+        message: "Your changes have not been saved to the server.",
+        confirmLabel: "Discard draft",
+        variant: "warning",
+      }))
+    )
+      return;
+    close(tabKey);
+  };
+  return (
+    <div className="flex flex-1 min-h-0 overflow-hidden">
+      <aside
+        className={cn(
+          "w-56 max-w-[45%] shrink-0 border-r border-border flex-col bg-bg-secondary",
+          showTree ? "flex" : "hidden",
+        )}
+      >
+        <div className="flex items-center justify-between px-3 py-2 border-b border-border">
+          <span className="text-xs font-semibold">EXPLORER</span>
+          <button
+            title="Refresh file tree"
+            onClick={() => setRefresh((n) => n + 1)}
+            className="p-1 text-text-muted hover:text-text-primary"
+          >
+            <RefreshCw size={13} />
+          </button>
+        </div>
+        <label className="flex items-center gap-2 px-3 py-2 border-b border-border text-text-muted">
+          <Search size={13} />
+          <input
+            aria-label="Filter filenames in expanded folders"
+            placeholder="Filter filenames…"
+            className="min-w-0 w-full bg-transparent text-xs outline-none"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
+        </label>
+        <label className="flex items-center gap-2 p-3 text-xs text-text-secondary">
+          <input
+            type="checkbox"
+            checked={showIgnored}
+            onChange={(e) => setShowIgnored(e.target.checked)}
+          />
+          Show Git-ignored files
+        </label>
+        <div className="flex-1 overflow-auto">
+          <Directory
+            key={repoPath}
+            repo={repoPath}
+            directory=""
+            showIgnored={showIgnored}
+            refresh={refresh}
+            depth={0}
+            filter={filter}
+          />
+        </div>
+      </aside>
+      <section className="flex-1 min-w-0 flex flex-col overflow-hidden">
+        <div className="flex border-b border-border bg-bg-secondary min-h-9 shrink-0">
+          <button
+            title={showTree ? "Hide explorer" : "Show explorer"}
+            onClick={() => setShowTree((value) => !value)}
+            className="px-2 text-text-muted hover:text-text-primary"
+          >
+            <Folder size={14} />
+          </button>
+          <div className="flex flex-1 overflow-x-auto">
+            {tabs.map(([tabKey, item]) => (
+              <div
+                key={tabKey}
+                className={cn(
+                  "flex shrink-0 items-center gap-2 border-r border-border text-xs",
+                  key === tabKey
+                    ? "bg-bg-primary text-text-primary"
+                    : "text-text-muted",
+                )}
+              >
+                <button
+                  title={item.file}
+                  onClick={() => void open(repoPath, item.file)}
+                  className="px-3 py-2"
+                >
+                  {isDirty(item) && <span className="text-accent mr-1">●</span>}
+                  {item.file.split("/").pop()}
+                </button>
+                <button
+                  aria-label={"Close " + item.file}
+                  disabled={item.saving || item.loading}
+                  onClick={() => void closeTab(tabKey)}
+                  className="mr-2 disabled:opacity-30"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+        {!doc ? (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-text-muted">
+            <FileText size={36} />
+            <p className="text-sm">Select a file to edit</p>
+            <p className="text-xs">
+              Changes are written to the server only when you save.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 px-3 py-2 border-b border-border text-xs shrink-0">
+              <span title={doc.file} className="truncate flex-1 font-mono">
+                {doc.file}
+              </span>
+              <button
+                title="Reload from server"
+                disabled={doc.loading || doc.saving}
+                onClick={() => void reloadCurrent()}
+                className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30"
+              >
+                <RefreshCw size={14} />
+              </button>
+              <button
+                onClick={() => void saveCurrent()}
+                disabled={
+                  !doc.loaded ||
+                  !isDirty(doc) ||
+                  doc.saving ||
+                  doc.loading ||
+                  doc.external
+                }
+                className="flex items-center gap-1.5 px-3 py-1 rounded bg-accent-emphasis text-white disabled:opacity-40"
+              >
+                {doc.saving ? (
+                  <Loader2 size={13} className="animate-spin" />
+                ) : (
+                  <Save size={13} />
+                )}
+                Save
+              </button>
+            </div>
+            {doc.external && (
+              <div
+                role="alert"
+                className="flex flex-wrap items-center gap-2 px-3 py-2 bg-warning/10 text-warning text-xs shrink-0"
+              >
+                <AlertTriangle size={14} />
+                <span className="flex-1">
+                  The file changed on the server. Your draft is preserved; copy
+                  it before reloading to merge your changes.
+                </span>
+                <button
+                  className="underline flex items-center gap-1"
+                  onClick={() =>
+                    void navigator.clipboard
+                      .writeText(doc.content)
+                      .then(() => toast("success", "Draft copied"))
+                      .catch(() =>
+                        toast(
+                          "error",
+                          "Copy unavailable; select and copy the editor text manually.",
+                        ),
+                      )
+                  }
+                >
+                  <Copy size={12} />
+                  Copy draft
+                </button>
+                <button
+                  className="underline"
+                  onClick={() => void reloadCurrent()}
+                >
+                  Reload
+                </button>
+              </div>
+            )}
+            {doc.error && (
+              <p
+                role="alert"
+                className="px-3 py-2 text-xs text-danger border-b border-border shrink-0"
+              >
+                {doc.error}
+              </p>
+            )}
+            {doc.loading ? (
+              <div className="flex-1 grid place-items-center text-text-muted">
+                <Loader2 className="animate-spin" size={20} />
+              </div>
+            ) : doc.loaded ? (
+              <Suspense
+                fallback={
+                  <div className="p-4 text-xs text-text-muted">
+                    Loading editor…
+                  </div>
+                }
+              >
+                <CodeEditor
+                  documentKey={key}
+                  doc={doc}
+                  onSave={() => void saveCurrent()}
+                />
+              </Suspense>
+            ) : (
+              <div className="flex-1 grid place-items-center text-xs text-text-muted">
+                This file cannot be edited.
+              </div>
+            )}
+            <div className="px-3 py-1 text-[0.65rem] text-text-muted border-t border-border flex justify-between shrink-0">
+              <span>
+                {doc.loaded
+                  ? doc.saving
+                    ? "Saving…"
+                    : isDirty(doc)
+                      ? "Unsaved changes"
+                      : "Saved"
+                  : "Read unavailable"}
+              </span>
+              <span>UTF-8 · {doc.lineEnding.toUpperCase()} · Cmd/Ctrl+S</span>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}

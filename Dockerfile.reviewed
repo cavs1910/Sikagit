@@ -20,7 +20,7 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/shared ./shared
 COPY --from=build /app/client/dist ./client/dist
-RUN chmod -R a+rX /app/client/dist
+RUN chmod -R a+rX /app/client/dist /app/server/dist /app/shared
 COPY git-policy.mjs /usr/local/lib/sikagit-git-policy.mjs
 COPY git-credential.mjs /usr/local/lib/sikagit-git-credential.mjs
 COPY --chmod=755 git-wrapper.sh /usr/local/bin/git
