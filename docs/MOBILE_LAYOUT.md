@@ -11,7 +11,8 @@ retain that information. Staged and unstaged lists stack vertically, with visibl
 actions for touch input. Virtual history rows retain their existing graph spacing.
 
 In Files, the explorer occupies the workspace while open and closes after a file
-is selected. The folder button reopens it. Drafts, save behavior and external change
+is selected. The sidebar open/close button toggles it. With no selected file,
+the explorer always stays visible on mobile, including after closing the last tab. Drafts, save behavior and external change
 checks use the existing editor store.
 
 Dialogs fit the viewport, settings tabs scroll horizontally, and the application

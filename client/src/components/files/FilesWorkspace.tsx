@@ -5,6 +5,8 @@ import {
   ChevronDown,
   FileText,
   Folder,
+  PanelLeftOpen,
+  PanelLeftClose,
   RefreshCw,
   Save,
   X,
@@ -161,7 +163,8 @@ export function FilesWorkspace({
     [refresh, setRefresh] = useState(0),
     [filter, setFilter] = useState(""),
     [showTree, setShowTree] = useState(true);
-  useEffect(() => { if (mobile && key) setShowTree(false); }, [mobile, key]);
+  const treeVisible = showTree || (mobile && !doc);
+  useEffect(() => { if (mobile) setShowTree(!key); }, [mobile, key]);
   const confirm = useConfirmStore((s) => s.confirm),
     toast = useToastStore((s) => s.addToast);
   const saveCurrent = useCallback(async () => {
@@ -227,12 +230,12 @@ export function FilesWorkspace({
         className={cn(
           "shrink-0 border-r border-border flex-col bg-bg-secondary",
           mobile ? "w-full" : "w-56 max-w-[45%]",
-          showTree ? "flex" : "hidden",
+          treeVisible ? "flex" : "hidden",
         )}
       >
         <div className="flex items-center justify-between px-3 py-2 border-b border-border">
           <span className="text-xs font-semibold">EXPLORER</span>
-          {mobile && <button aria-label="Close explorer" onClick={() => setShowTree(false)} className="p-2"><X size={16} /></button>}
+          {mobile && doc && <button aria-label="Hide explorer" onClick={() => setShowTree(false)} className="p-2"><PanelLeftClose size={16} /></button>}
           <button
             title="Refresh file tree"
             onClick={() => setRefresh((n) => n + 1)}
@@ -271,14 +274,15 @@ export function FilesWorkspace({
           />
         </div>
       </aside>
-      <section className={cn("flex-1 min-w-0 flex flex-col overflow-hidden", mobile && showTree && "hidden")}>
+      <section className={cn("flex-1 min-w-0 flex flex-col overflow-hidden", mobile && treeVisible && "hidden")}>
         <div className="flex border-b border-border bg-bg-secondary min-h-9 shrink-0">
           <button
-            title={showTree ? "Hide explorer" : "Show explorer"}
+            title={treeVisible ? "Hide explorer" : "Show explorer"}
+            aria-expanded={treeVisible}
             onClick={() => setShowTree((value) => !value)}
             className="px-2 text-text-muted hover:text-text-primary"
           >
-            <Folder size={14} />
+            {treeVisible ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           </button>
           <div className="flex flex-1 min-w-0 overflow-x-auto">
             {tabs.map(([tabKey, item]) => (
