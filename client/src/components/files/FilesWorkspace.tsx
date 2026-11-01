@@ -164,7 +164,7 @@ export function FilesWorkspace({
     [filter, setFilter] = useState(""),
     [showTree, setShowTree] = useState(true);
   const treeVisible = showTree || (mobile && !doc);
-  useEffect(() => { if (mobile) setShowTree(!key); }, [mobile, key]);
+  useEffect(() => { if (mobile && visible) setShowTree(!key); }, [mobile, key, visible]);
   const confirm = useConfirmStore((s) => s.confirm),
     toast = useToastStore((s) => s.addToast);
   const saveCurrent = useCallback(async () => {

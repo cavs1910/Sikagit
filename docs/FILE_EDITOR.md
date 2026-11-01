@@ -2,7 +2,7 @@
 
 Open a repository and select **Files**, next to **History & Changes**. The explorer displays folders on demand, including unchanged and untracked files. Use **Show Git-ignored files** to include ignored files; `.git` remains hidden. The filename filter applies to files in expanded folders. Refresh the tree after external file creation, deletion or renaming.
 
-Click a text file to open it. Multiple files can remain open in tabs. **Save** and **Cmd/Ctrl+S** write to the original server file; saving does not stage or commit anything. The Git status and sidebar indicator refresh after a successful save. Switch back to **History & Changes** to review, stage and commit.
+Click a text file to open it. Diff file headers in **History & Changes** also include an **Open in editor** button that switches to Files and selects the working-tree file. From a historical commit, this opens the current file on disk. Existing drafts are preserved; deleted or unsupported files show the editor’s normal read error. Multiple files can remain open in tabs. **Save** and **Cmd/Ctrl+S** write to the original server file; saving does not stage or commit anything. The Git status and sidebar indicator refresh after a successful save. Switch back to **History & Changes** to review, stage and commit.
 
 The editor uses CodeMirror 6, loaded only when needed, with undo/redo, line numbers, indentation, bracket matching, search/replace and syntax support for JavaScript/TypeScript/JSX, JSON, Markdown, Python, HTML and CSS. Other UTF-8 files use plain text editing. No additional process, port, account or external editor service is needed.
 

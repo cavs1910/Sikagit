@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { FileCode, ChevronRight, ChevronDown, Image as ImageIcon } from 'lucide-react';
+import { EditorNavigation } from '../files/EditorNavigation';
+import { useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { FileCode, SquarePen, ChevronRight, ChevronDown, Image as ImageIcon } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { isImageFile, isBinaryFile } from './ImagePreview';
 
@@ -278,6 +279,17 @@ function LazyHunk({ hunk, hunkIdx, filePath, diffFontSize, diffLineHeight, onSta
   );
 }
 
+function OpenInEditorButton({ repo, file }: { repo?: string; file: string }) {
+  const open = useContext(EditorNavigation);
+  if (!repo || !open) return null;
+  return <button
+    aria-label={`Open ${file} in editor`}
+    title="Open working-tree file in editor"
+    className="shrink-0 p-1 rounded text-accent hover:bg-bg-primary/50"
+    onClick={event => { event.stopPropagation(); open(repo, file); }}
+  ><SquarePen size={14} /></button>;
+}
+
 function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, onDiscardHunk, hunkActionsDisabledReason }: {
   file: DiffFile;
   hunkStartIndex: number;
@@ -311,6 +323,7 @@ function DiffFileSection({ file, hunkStartIndex, repoPath, commit, onStageHunk, 
           {addCount > 0 && <span className="text-success">+{addCount}</span>}
           {removeCount > 0 && <span className="text-danger">-{removeCount}</span>}
         </span>
+        <OpenInEditorButton repo={repoPath} file={file.path} />
       </div>
 
       {/* Binary file notice — triggered by extension OR git's binary marker
@@ -414,6 +427,7 @@ function LazyDiffFile({ file, hunkStartIndex, repoPath, commit, onStageHunk, onD
             {addCount > 0 && <span className="text-success">+{addCount}</span>}
             {removeCount > 0 && <span className="text-danger">-{removeCount}</span>}
           </span>
+          <OpenInEditorButton repo={repoPath} file={file.path} />
         </div>
       </div>
     );

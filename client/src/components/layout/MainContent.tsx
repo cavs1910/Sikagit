@@ -1,3 +1,5 @@
+import { EditorNavigation } from '../files/EditorNavigation';
+import { useEditorStore } from '../../store/editorStore';
 import { useMobile } from '../../hooks/useMobile';
 import { lazy, Suspense } from 'react';
 import { useEffect, useCallback, useState } from 'react';
@@ -265,8 +267,16 @@ export function MainContent() {
   }
 
   const hasRemote = status?.tracking || status?.remoteUrl;
+  const openInEditor = (repoPath: string, file: string) => {
+    if (repoPath !== repo.path) return;
+    setFilesOpened(true);
+    setWorkspaceTab('files');
+    void useEditorStore.getState().open(repoPath, file).catch(error => addToast('error', error.message));
+  };
+
 
   return (
+    <EditorNavigation.Provider value={openInEditor}>
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="repo-toolbar group h-10 bg-bg-secondary border-b border-border flex items-center px-3 gap-2">
@@ -529,5 +539,6 @@ export function MainContent() {
         <RepoSettingsDialog repo={repo} onClose={() => setShowRepoSettings(false)} />
       )}
     </div>
+    </EditorNavigation.Provider>
   );
 }
