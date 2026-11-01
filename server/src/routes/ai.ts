@@ -9,6 +9,7 @@ import {
 } from "../services/aiSettings";
 import { randomUUID } from "crypto";
 import { simpleGit } from "simple-git";
+import { getModelCatalog } from '../services/modelCatalog';
 import * as aiService from "../services/aiService";
 
 const router = Router();
@@ -28,6 +29,8 @@ function asyncHandler(
     });
   };
 }
+
+router.get('/models',asyncHandler(async(req,res)=>{res.json({success:true,data:await getModelCatalog(req.query.provider,req.query.refresh==='true')});}));
 
 router.get(
   "/settings",

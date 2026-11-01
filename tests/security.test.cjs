@@ -18,7 +18,7 @@ fs.writeFileSync(path.join(repo,'tracked.txt'),'original\n');git('add','.');git(
 const sec = require('/app/server/dist/server/src/security.js');
 const services = require('/app/server/dist/server/src/services/gitService.js');
 const headers = {Authorization:'Basic '+Buffer.from('audit:'+password).toString('base64'),'Content-Type':'application/json'};
-const fixtureFile=path.join(tmp,'ai-fixture.json'); process.env.AI_TEST_FIXTURE=fixtureFile;
+const fixtureFile=path.join(tmp,'ai-fixture.json'); process.env.AI_TEST_FIXTURE=fixtureFile; process.env.AI_TEST_CATALOG_LOG=path.join(tmp,'catalog-requests.jsonl');
 const child = spawn(process.execPath,['--require','/tests/ai-provider-mock.cjs','/app/server/dist/server/src/index.js'],{env:process.env,stdio:['ignore','ignore','pipe']});
 let logs='';child.stderr.on('data',d=>{logs+=d;});
 const ready = (async()=>{for(let i=0;i<100;i++){try{const r=await fetch(base+'/api/v1/health',{headers});if(r.ok)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error('Server did not start: '+logs.slice(-1000));})();
@@ -242,4 +242,38 @@ test('editor bounds file sizes and refuses missing revisions, read-only files an
  fs.writeFileSync(path.join(repo,'editor-directory/too-large.txt'),Buffer.alloc(1024*1024+1,65));assert.equal((await editorRead('editor-directory/too-large.txt')).status,413);
  execFileSync('mkfifo',[path.join(repo,'editor-directory/pipe')]);assert.equal((await editorRead('editor-directory/pipe')).status,400);
  assert.equal((await editorSave('editor-directory/new-file.txt','not created','a'.repeat(64))).status,400);assert.equal(fs.existsSync(path.join(repo,'editor-directory/new-file.txt')),false);
+});
+
+const modelFixture=(id,cost={input:1,output:4})=>({id,name:'Model '+id,modalities:{input:['text'],output:['text']},cost,limit:{context:128000},structured_output:true,release_date:'2026-01-01'});
+test('catalog normalizes provider prices, excludes retired/non-text models, and keeps unknown distinct from free',()=>{
+ const {normalizeModels,catalogProvider}=require('/app/server/dist/server/src/services/modelCatalog.js');
+ const data={openai:{models:{paid:modelFixture('paid'),free:modelFixture('free',{input:0,output:0}),unknown:modelFixture('unknown',{}),negative:modelFixture('negative',{input:-1,output:NaN}),image:{...modelFixture('image'),modalities:{input:['text'],output:['image']}},retired:{...modelFixture('retired'),status:'deprecated'},bad:{...modelFixture('bad'),id:'x\nmalicious'}}}};
+ const models=normalizeModels('openai',data);assert.deepEqual(models.map(m=>m.id).sort(),['free','negative','paid','unknown']);assert.equal(models.find(m=>m.id==='paid').inputPrice,1);assert.equal(models.find(m=>m.id==='free').inputPrice,0);assert.equal(models.find(m=>m.id==='unknown').inputPrice,null);assert.equal(models.find(m=>m.id==='negative').inputPrice,null);
+ assert.throws(()=>catalogProvider('https://127.0.0.1'));assert.throws(()=>normalizeModels('google',{}));
+ const router=normalizeModels('openrouter',{data:[{id:'lab/model',architecture:{input_modalities:['text'],output_modalities:['text']},pricing:{prompt:'0.00000015',completion:'0.0000006',input_cache_read:'0'},context_length:64000,supported_parameters:['structured_outputs'],endpoints:['/api/v1/chat/completions']}]})[0];assert.ok(Math.abs(router.inputPrice-.15)<1e-12);assert.ok(Math.abs(router.outputPrice-.6)<1e-12);assert.equal(router.cacheReadPrice,0);assert.equal(router.structuredOutput,true);
+});
+test('public catalog works without a key, rejects arbitrary providers, and falls back offline for all direct providers',async()=>{
+ fs.writeFileSync(fixtureFile,JSON.stringify({catalogOffline:true}));
+ for(const provider of ['openai','anthropic','google','groq','deepseek','mistral','xai']){
+  const r=await request('/api/v1/ai/models?provider='+provider);const body=await r.json();assert.equal(r.status,200,JSON.stringify(body));assert.equal(body.data.provider,provider);assert.equal(body.data.sourceType,'snapshot');assert.ok(body.data.models.length>0);assert.match(body.data.warning,/catalog|prices/i);assert.ok(body.data.models.every(m=>m.inputPrice===null||m.inputPrice>=0));
+ }
+ assert.equal((await request('/api/v1/ai/models?provider=http%3A%2F%2F127.0.0.1')).status,400);
+ assert.equal((await fetch(base+'/api/v1/ai/models?provider=openai')).status,401);
+});
+test('live OpenRouter catalog converts units, uses no saved key and caches repeated refresh requests',async()=>{
+ fs.writeFileSync(fixtureFile,JSON.stringify({catalog:{data:[{id:'lab/paid',name:'Paid fixture',architecture:{input_modalities:['text'],output_modalities:['text']},pricing:{prompt:'0.000001',completion:'0.000004'},supported_parameters:['structured_outputs'],context_length:100000},{id:'lab/free',name:'Free fixture',architecture:{input_modalities:['text'],output_modalities:['text']},pricing:{prompt:'0',completion:'0'},supported_parameters:[]}]}}));
+ const response=await (await request('/api/v1/ai/models?provider=openrouter')).json();assert.equal(response.data.sourceType,'live');assert.equal(response.data.models.find(m=>m.id==='lab/paid').inputPrice,1);assert.equal(response.data.models.find(m=>m.id==='lab/paid').outputPrice,4);assert.equal(response.data.models.find(m=>m.id==='lab/free').outputPrice,0);
+ const count=fs.readFileSync(process.env.AI_TEST_CATALOG_LOG,'utf8').trim().split('\n').length;
+ await request('/api/v1/ai/models?provider=openrouter&refresh=true');assert.equal(fs.readFileSync(process.env.AI_TEST_CATALOG_LOG,'utf8').trim().split('\n').length,count);
+ const calls=fs.readFileSync(process.env.AI_TEST_CATALOG_LOG,'utf8').trim().split('\n').map(JSON.parse);assert.ok(calls.every(c=>c.hasAuthorization===false&&c.redirect==='error'&&c.userAgent==='Sikagit/1.0'));
+ const disk=JSON.parse(fs.readFileSync(path.join(tmp,'data/ai-model-catalog.json'),'utf8'));assert.equal(disk.openrouter.models.length,2);
+});
+test('catalog refresh recovers from stale persisted data and retains cache when upstream fails',async()=>{
+ const filename='/app/server/dist/server/src/services/modelCatalog.js';delete require.cache[require.resolve(filename)];const catalog=require(filename);const original=global.fetch;let calls=0;
+ try {
+  global.fetch=async()=>{calls++;return new Response(JSON.stringify({openai:{models:{fixture:modelFixture('fresh-model')}}}),{headers:{'content-type':'application/json'}});};
+  const fresh=await catalog.getModelCatalog('openai',true);assert.equal(fresh.sourceType,'live');assert.equal(fresh.models[0].id,'fresh-model');await catalog.getModelCatalog('openai',true);assert.equal(calls,1);
+  delete require.cache[require.resolve(filename)];const failed=require(filename);global.fetch=async()=>{throw new Error('upstream outage with fake secret marker');};
+  const fallback=await failed.getModelCatalog('openai',true);assert.equal(fallback.sourceType,'cache');assert.equal(fallback.models[0].id,'fresh-model');assert.match(fallback.warning,/unavailable/i);assert.equal(JSON.stringify(fallback).includes('fake secret marker'),false);
+ }finally{global.fetch=original;}
 });

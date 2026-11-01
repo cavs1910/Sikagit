@@ -143,3 +143,13 @@ export interface DiffPayload {
   /** Empty when `whitespace` is `none` or nothing was filtered out. */
   suppressed: DiffWhitespaceSuppression[];
 }
+
+export interface AIModelInfo {
+  id: string; name: string; inputPrice: number | null; outputPrice: number | null;
+  cacheReadPrice: number | null; contextWindow: number | null;
+  structuredOutput: boolean | null; reasoning: boolean | null; released: string | null;
+}
+export interface AIModelCatalog {
+  provider: string; models: AIModelInfo[]; sourceName: string; sourceURL: string; pricingURL: string;
+  updatedAt: string; stale: boolean; sourceType: 'live' | 'cache' | 'snapshot'; warning: string | null;
+}

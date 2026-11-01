@@ -2,6 +2,14 @@
 const fs=require('node:fs');
 const original=global.fetch;
 global.fetch=async(url,init)=>{
+ if(String(url)==='https://models.dev/api.json'||String(url)==='https://openrouter.ai/api/v1/models') {
+  const fixture=JSON.parse(fs.readFileSync(process.env.AI_TEST_FIXTURE,'utf8'));
+  const headers=new Headers(init?.headers);
+  fs.appendFileSync(process.env.AI_TEST_CATALOG_LOG,JSON.stringify({url:String(url),hasAuthorization:headers.has('authorization'),redirect:init?.redirect,userAgent:headers.get('user-agent')})+'\n');
+  if(fixture.catalogOffline)throw new Error('simulated catalog outage');
+  return new Response(JSON.stringify(fixture.catalog),{headers:{'content-type':'application/json'}});
+ }
+
  if(!String(url).startsWith('https://api.openai.com/')&&!String(url).startsWith('https://openrouter.ai/')) return original(url,init);
  const fixture=JSON.parse(fs.readFileSync(process.env.AI_TEST_FIXTURE,'utf8'));
  if(fixture.status) return new Response(JSON.stringify({error:{message:'secret-provider-error-'+fixture.secret}}),{status:fixture.status,headers:{'content-type':'application/json'}});

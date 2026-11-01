@@ -1,3 +1,4 @@
+import { AIModelPicker } from "./AIModelPicker";
 import { useEffect, useState } from "react";
 import { api, type AISettings } from "../../lib/api";
 import { refreshAISettings } from "../../lib/aiSettings";
@@ -106,20 +107,19 @@ export function AISettingsPanel() {
             ))}
           </select>
         </label>
-        <label className="block space-y-1">
-          <span>Model ID</span>
-          <input
-            className={field}
-            value={s.model}
-            maxLength={200}
-            placeholder={
-              s.provider === "openrouter"
-                ? "provider/model — from the OpenRouter catalog"
-                : "Exact model ID from your provider"
-            }
-            onChange={(e) => update({ model: e.target.value })}
-          />
-        </label>
+        <AIModelPicker
+          provider={s.provider}
+          value={s.model}
+          onSelect={(model) =>
+            update({
+              model: model.id,
+              ...(model.structuredOutput === false
+                ? { responseMode: "json" as const }
+                : {}),
+            })
+          }
+          onCustom={(model) => update({ model })}
+        />
         <label className="block space-y-1">
           <span>
             API key {s.hasApiKey && !removeKey ? "· saved securely" : ""}

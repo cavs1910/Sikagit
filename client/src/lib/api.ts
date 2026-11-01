@@ -20,6 +20,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 export interface DirectoryEntry { name:string; path:string; type:'directory'|'file'|'blocked'; }
 export interface TextFile { content:string; revision:string; lineEnding:'lf'|'crlf'; }
 export const api = {
+  aiModels: (provider:string, refresh=false) => request<import('@sikagit/shared').AIModelCatalog>('/ai/models?'+new URLSearchParams({provider,refresh:String(refresh)})),
   editorTree: (repo:string,directory='',showIgnored=false) => request<DirectoryEntry[]>('/editor/tree?'+new URLSearchParams({repo,directory,showIgnored:String(showIgnored)})),
   editorRead: (repo:string,file:string) => request<TextFile>('/editor/file?'+new URLSearchParams({repo,file})),
   editorRevision: (repo:string,file:string) => request<{revision:string}>('/editor/file?'+new URLSearchParams({repo,file,metadata:'true'})),
