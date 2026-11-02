@@ -1,3 +1,4 @@
+import { CommitPublication } from './CommitPublication';
 import { useRef, useCallback, useState } from 'react';
 import { GitMerge, GitBranch, Trash2, Archive } from 'lucide-react';
 import type { GraphCommit } from '@sikagit/shared';
@@ -58,6 +59,8 @@ export function CommitRow({ commit, graphWidth, columnWidths, isSelected, onClic
       >
         {/* Graph space */}
         <span style={{ width: graphWidth }} className="flex-shrink-0" />
+
+        <CommitPublication state={commit.publication} />
 
         {/* Description */}
         <span className="flex-1 truncate ml-2">

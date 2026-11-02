@@ -1,3 +1,4 @@
+import { CommitPublication } from './CommitPublication';
 import { useEffect, useLayoutEffect, useState, useRef } from 'react';
 import { X, Copy, Check, GitCommitHorizontal, GitMerge, User, Calendar, GitFork, Undo2, Loader2, Upload, RotateCcw } from 'lucide-react';
 import { MergeDialog } from '../operations/MergeDialog';
@@ -292,6 +293,7 @@ export function CommitDetail({ repoPath }: CommitDetailProps) {
 
           {/* Metadata */}
           <div className="flex items-center gap-3 px-3.5 pb-2 flex-wrap">
+            <CommitPublication state={commit?.publication} showLabel />
             <span className="inline-flex items-center gap-1.5 text-[0.65rem]">
               <GitCommitHorizontal size={10} className="text-accent" />
               <span className="font-mono text-text-secondary">{truncateHash(commit.hash)}</span>

@@ -1,3 +1,4 @@
+import { BranchPublicationStatus } from './BranchPublicationStatus';
 import { EditorNavigation } from '../files/EditorNavigation';
 import { useEditorStore } from '../../store/editorStore';
 import { useMobile } from '../../hooks/useMobile';
@@ -381,6 +382,9 @@ export function MainContent() {
           </div>
         )}
 
+        {/* Publication relative to the configured upstream, using local refs. */}
+        {status && <BranchPublicationStatus status={status} />}
+
         {/* Platform badge */}
         {status?.remoteUrl && (() => {
           const url = status.remoteUrl!.toLowerCase();
@@ -397,33 +401,6 @@ export function MainContent() {
           ) : null;
         })()}
 
-        {/* Remote status text */}
-        {status && (
-          <>
-            {hasRemote && <div className="w-px h-4 bg-border mx-1" />}
-            {hasRemote ? (
-              <span className="text-[0.65rem] text-text-secondary cursor-default">
-                {status.tracking ? (
-                  <>
-                    {status.ahead > 0 && status.behind > 0 ? (
-                      <>{status.ahead} {status.ahead === 1 ? 'commit' : 'commits'} to push, {status.behind} to pull</>
-                    ) : status.ahead > 0 ? (
-                      <span className="text-accent">{status.ahead} {status.ahead === 1 ? 'commit' : 'commits'} to push</span>
-                    ) : status.behind > 0 ? (
-                      <span className="text-warning">{status.behind} {status.behind === 1 ? 'commit' : 'commits'} to pull</span>
-                    ) : (
-                      <span className="text-text-muted">Synced with remote</span>
-                    )}
-                  </>
-                ) : (
-                  <span className="text-text-muted">No upstream — push to set</span>
-                )}
-              </span>
-            ) : (
-              <span className="text-[0.65rem] text-text-muted cursor-default">Local — no remote configured</span>
-            )}
-          </>
-        )}
       </div>
 
       <div className="flex gap-1 px-3 py-1 border-b border-border bg-bg-secondary shrink-0" role="tablist" aria-label="Repository workspace">

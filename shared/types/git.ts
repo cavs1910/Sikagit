@@ -10,6 +10,8 @@ export interface GitCommit {
   branches: string[];
   tags: string[];
   isHead: boolean;
+  /** Reachability from local remote-tracking refs, not a live remote query. */
+  publication?: 'published' | 'local' | 'unknown';
 }
 
 export interface GraphCommit extends GitCommit {
@@ -101,6 +103,9 @@ export interface RepoConfig {
 export interface GitStatus {
   current: string | null;
   tracking: string | null;
+  upstreamStatus?: 'remote' | 'local' | 'missing' | 'none';
+  detached?: boolean;
+  hasRemote?: boolean;
   ahead: number;
   behind: number;
   remoteUrl?: string; // origin URL when no upstream tracking is set

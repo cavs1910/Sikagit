@@ -343,3 +343,43 @@ test('Gateway offline catalog uses its bundled source and legacy settings migrat
  const before=settings.publicSettings();assert.equal(before.hasApiKey,true);assert.equal(before.connections.openai.hasApiKey,true);settings.saveSettings({...before,enabled:false});assert.equal(settings.configured(false).apiKey,'fake-direct-retained');assert.equal(JSON.parse(fs.readFileSync(filename,'utf8')).secret,direct.secret);
  }finally{fs.writeFileSync(filename,previous);}
 });
+
+function publicationFixture(name) {
+ const dir=path.join(root,name);fs.mkdirSync(dir);
+ const git=(...args)=>execFileSync('/usr/bin/git',['-C',dir,...args],{encoding:'utf8'}).trim();
+ git('init','-q','-b','main');git('config','user.name','Publication fixture');git('config','user.email','fixture@example.invalid');
+ const commit=(text)=>{fs.writeFileSync(path.join(dir,'file.txt'),text+'\n');git('add','file.txt');git('commit','-qm',text);return git('rev-parse','HEAD');};
+ return {dir,git,commit};
+}
+test('publication uses remote ancestry across pages and any remote, not tags or branch decorations',async()=>{
+ const {dir,git,commit}=publicationFixture('publication-history');
+ const base=commit('base'),published=commit('published'),local=commit('local');
+ git('remote','add','origin','https://example.invalid/publication.git');git('update-ref','refs/remotes/origin/main',published);git('tag','local-tag',local);
+ const beforeHead=git('rev-parse','HEAD'),beforeIndex=git('write-tree');
+ let states=await services.getCommitPublication(dir,[base,published,local]);assert.equal(states.get(base),'published');assert.equal(states.get(published),'published');assert.equal(states.get(local),'local');
+ const page=await services.getLogWithParents(dir,1,2);assert.equal(page.length,1);assert.equal(page[0].hash,base);assert.equal(page[0].publication,'published');
+ git('update-ref','refs/remotes/backup/topic',local);states=await services.getCommitPublication(dir,[local]);assert.equal(states.get(local),'published');assert.equal((await services.getStatus(dir)).tracking,null);
+ git('update-ref','-d','refs/remotes/backup/topic');git('reset','--soft',published);
+ const history=await services.getLogWithParents(dir,100);assert.equal(history.find(c=>c.hash===local).publication,'local');
+ git('reset','--soft',beforeHead);assert.equal(git('write-tree'),beforeIndex);assert.equal(git('status','--porcelain'),'');
+});
+test('publication is local without remote refs and unknown on unavailable objects or invalid revisions',async()=>{
+ const {dir,git,commit}=publicationFixture('publication-errors');const head=commit('only local');
+ assert.equal((await services.getCommitPublication(dir,[head])).get(head),'local');
+ git('update-ref','refs/remotes/origin/main',head);const missing='f'.repeat(40);
+ assert.equal((await services.getCommitPublication(dir,[missing])).get(missing),'unknown');
+ const invalid='--output=/tmp/publication-injected';assert.equal((await services.getCommitPublication(dir,[invalid])).get(invalid),'unknown');assert.equal(fs.existsSync('/tmp/publication-injected'),false);
+ const overLimit=Array.from({length:501},()=>head);assert.equal((await services.getCommitPublication(dir,overLimit)).get(head),'unknown');assert.equal((await services.getCommitPublication(dir,[])).size,0);
+});
+test('branch publication distinguishes no upstream, remote sync, divergence, missing/local upstream and detached HEAD',async()=>{
+ const {dir,git,commit}=publicationFixture('publication-branch');const base=commit('base'),head=commit('local');
+ let status=await services.getStatus(dir);assert.equal(status.upstreamStatus,'none');assert.equal(status.detached,false);assert.equal(status.hasRemote,false);
+ git('remote','add','team','https://example.invalid/team.git');assert.equal((await services.getStatus(dir)).hasRemote,true);
+ git('remote','add','origin','https://example.invalid/publication.git');git('update-ref','refs/remotes/origin/main',base);git('branch','--set-upstream-to=origin/main');
+ status=await services.getStatus(dir);assert.equal(status.upstreamStatus,'remote');assert.equal(status.ahead,1);assert.equal(status.behind,0);
+ git('update-ref','refs/remotes/origin/main',head);status=await services.getStatus(dir);assert.equal(status.ahead,0);assert.equal(status.behind,0);
+ const tree=git('rev-parse',base+'^{tree}'),remote=git('commit-tree',tree,'-p',base,'-m','remote side');git('update-ref','refs/remotes/origin/main',remote);status=await services.getStatus(dir);assert.equal(status.ahead,1);assert.equal(status.behind,1);
+ git('update-ref','-d','refs/remotes/origin/main');assert.equal((await services.getStatus(dir)).upstreamStatus,'missing');
+ git('branch','local-upstream',base);git('branch','--set-upstream-to=local-upstream');assert.equal((await services.getStatus(dir)).upstreamStatus,'local');
+ git('checkout','--detach',head);assert.equal((await services.getStatus(dir)).detached,true);
+});

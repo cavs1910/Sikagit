@@ -117,7 +117,7 @@ function readHostGitConfig(key: string): string {
   return '';
 }
 
-function getGit(repoPath: string, opts: { network?: boolean } = {}): SimpleGit {
+function getGit(repoPath: string, opts: { network?: boolean; timeoutMs?: number } = {}): SimpleGit {
   const normalized = normalizePath(repoPath);
   // core.quotepath=false makes git emit non-ASCII paths (Arabic, CJK, accents…)
   // as raw UTF-8 instead of octal escapes like "\330\261\331\210...". Simple-git
@@ -131,7 +131,7 @@ function getGit(repoPath: string, opts: { network?: boolean } = {}): SimpleGit {
   const git = simpleGit(normalized, {
     config: ['core.quotepath=false'],
     allowEnvironment: ['GIT_TERMINAL_PROMPT'],
-    timeout: { block: opts.network ? NETWORK_TIMEOUT_MS : STATUS_TIMEOUT_MS },
+    timeout: { block: opts.timeoutMs ?? (opts.network ? NETWORK_TIMEOUT_MS : STATUS_TIMEOUT_MS) },
   });
 
   if (opts.network) {
@@ -268,14 +268,28 @@ export async function getStatus(repoPath: string): Promise<GitStatus> {
 
   // Get remote URL for platform detection
   let remoteUrl: string | null = null;
+  let hasRemote = false;
   try {
     const url = (await git.raw(['remote', 'get-url', 'origin'])).trim();
-    if (url) remoteUrl = url;
-  } catch { /* no remote */ }
+    if (url) { remoteUrl = url; hasRemote = true; }
+  } catch {
+    // A repository may use a remote name other than origin.
+    try { hasRemote = !!(await git.raw(['remote'])).trim(); } catch { /* no remote metadata */ }
+  }
 
+  let upstreamStatus: GitStatus['upstreamStatus'] = 'none';
+  if (status.tracking) {
+    try {
+      const ref = (await git.raw(['rev-parse', '--symbolic-full-name', '@{upstream}'])).trim();
+      upstreamStatus = ref.startsWith('refs/remotes/') ? 'remote' : 'local';
+    } catch { upstreamStatus = 'missing'; }
+  }
   return {
     current: status.current,
     tracking: status.tracking,
+    upstreamStatus,
+    detached: status.detached,
+    hasRemote,
     ahead: status.ahead,
     behind: status.behind,
     remoteUrl: remoteUrl || undefined,
@@ -408,6 +422,29 @@ export async function getLog(
   }));
 }
 
+/** Classify a page in one bounded walk, including ancestors of remote tips
+ * outside that page. Never fetches, and never turns an incomplete walk into a
+ * claim that a commit was published. */
+export async function getCommitPublication(repoPath: string, hashes: string[]): Promise<Map<string, NonNullable<GitCommit['publication']>>> {
+  const result = new Map<string, NonNullable<GitCommit['publication']>>(hashes.map(hash => [hash, 'unknown']));
+  if (!hashes.length || hashes.length > 500) return result;
+  const maxWalk = 10000;
+  try {
+    if (hashes.some(hash => !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/.test(hash))) return result;
+    const git = getGit(repoPath, { timeoutMs: 2000 });
+    const refs = await git.raw(['for-each-ref', '--count=1', '--format=%(refname)', 'refs/remotes/']);
+    if (!refs.trim()) {
+      for (const hash of hashes) result.set(hash, 'local');
+      return result;
+    }
+    const raw = await git.raw(['rev-list', `--max-count=${maxWalk + 1}`, ...hashes, '--not', '--remotes', '--']);
+    const local = new Set(raw.trim().split(/\s+/).filter(Boolean));
+    const complete = local.size <= maxWalk;
+    for (const hash of hashes) result.set(hash, local.has(hash) ? 'local' : complete ? 'published' : 'unknown');
+  } catch { /* A missing object, timeout or Git error leaves the page unknown. */ }
+  return result;
+}
+
 export async function getLogWithParents(
   repoPath: string,
   limit = 200,
@@ -479,12 +516,14 @@ export async function getLogWithParents(
     };
   });
 
-  // Deduplicate commits (reflog may include the same hash multiple times)
-  return allCommits.filter(c => {
+  // Deduplicate commits (reflog may include the same hash multiple times).
+  const page = allCommits.filter(c => {
     if (seen.has(c.hash)) return false;
     seen.add(c.hash);
     return true;
   });
+  const publication = await getCommitPublication(repoPath, page.map(c => c.hash));
+  return page.map(c => ({ ...c, publication: publication.get(c.hash) ?? 'unknown' }));
 }
 
 /**
