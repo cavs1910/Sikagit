@@ -318,7 +318,7 @@ export function MainContent() {
             <Trash2 size={12} />
           </button>
         </div>
-        <BranchSwitcher repoPath={repo.path} />
+        <BranchSwitcher repoPath={repo.path} onMerge={() => { setMergePreselect(undefined); setShowMergeDialog(true); }} />
         <span className="repo-path text-xs text-text-secondary flex-1 demo-blur">{repo.displayPath}</span>
 
         {/* Remote actions */}

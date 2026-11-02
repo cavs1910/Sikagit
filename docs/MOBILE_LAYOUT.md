@@ -4,6 +4,9 @@ Below 768 CSS pixels, SikaGit uses a repository drawer instead of the desktop
 sidebar. Selecting a repository, pressing Escape or tapping the backdrop closes
 it. Desktop sidebar visibility and saved panel sizes remain independent.
 
+The branch picker keeps a **Merge…** button in its footer while the branch list
+scrolls independently. It opens the existing merge dialog for the current branch.
+
 The Git workspace provides History and Changes views. Selecting a commit or file
 opens its detail at the full available width; Back returns to the previous view.
 The mobile history hides the Type, Author, Date and Hash columns; commit details

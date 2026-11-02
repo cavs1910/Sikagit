@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { GitBranch, Check, ChevronDown, Search, Cloud, Loader2 } from 'lucide-react';
+import { GitBranch, GitMerge, Check, ChevronDown, Search, Cloud, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
@@ -15,7 +15,7 @@ const remoteLabel = (name: string) => name.replace(/^remotes\//, '');
  * dropdown of all local + remote branches. Selecting one switches to it via the
  * safe /git/switch-branch endpoint (creates a tracking branch for remotes).
  */
-export function BranchSwitcher({ repoPath }: { repoPath: string }) {
+export function BranchSwitcher({ repoPath, onMerge }: { repoPath: string; onMerge: () => void }) {
   const branches = useStatusStore(s => s.branches);
   const status = useStatusStore(s => s.status);
   const fetchAll = useStatusStore(s => s.fetchAll);
@@ -78,6 +78,7 @@ export function BranchSwitcher({ repoPath }: { repoPath: string }) {
       <button
         onClick={() => setOpen(o => !o)}
         title={`Current branch: ${current} — click to switch`}
+        aria-expanded={open}
         className={cn(
           'flex items-center gap-1.5 max-w-[220px] px-2 py-1 rounded-md text-xs border bg-bg-primary transition-colors',
           open
@@ -91,7 +92,7 @@ export function BranchSwitcher({ repoPath }: { repoPath: string }) {
       </button>
 
       {open && (
-        <div className="branch-menu absolute left-0 top-full mt-1 z-40 w-[280px] bg-bg-primary border border-border rounded-md shadow-lg flex flex-col max-h-[380px]">
+        <div className="branch-menu absolute left-0 top-full mt-1 z-40 w-[280px] bg-bg-primary border border-border rounded-md shadow-lg flex flex-col overflow-hidden max-h-[380px]">
           {/* Filter */}
           <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border flex-shrink-0">
             <Search size={12} className="text-text-muted flex-shrink-0" />
@@ -104,7 +105,7 @@ export function BranchSwitcher({ repoPath }: { repoPath: string }) {
             />
           </div>
 
-          <div className="overflow-y-auto py-1">
+          <div className="min-h-0 flex-1 overflow-y-auto py-1" aria-label="Available branches">
             <div className="px-3 py-1 text-[0.6rem] uppercase tracking-wider text-text-muted">Local</div>
             {local.length === 0 ? (
               <p className="px-3 py-1 text-[0.7rem] text-text-muted">No matching branches</p>
@@ -134,6 +135,17 @@ export function BranchSwitcher({ repoPath }: { repoPath: string }) {
                 ))}
               </>
             )}
+          </div>
+          <div className="shrink-0 border-t border-border p-2 bg-bg-secondary">
+            <button
+              type="button"
+              disabled={!!switching}
+              onClick={() => { setOpen(false); setFilter(''); onMerge(); }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-accent hover:bg-accent/10 disabled:opacity-40"
+            >
+              <GitMerge size={14} className="shrink-0" />
+              Merge…
+            </button>
           </div>
         </div>
       )}
