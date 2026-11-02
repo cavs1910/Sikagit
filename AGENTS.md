@@ -21,9 +21,9 @@ Este archivo permite trabajar sin el chat original. Leelo antes de cambiar el pr
 ## Arquitectura y funciones añadidas
 
 - Monorepo npm: `client/` (React 19, Vite, Tailwind, Zustand), `server/` (Express, Socket.IO, simple-git, better-sqlite3), `shared/` (tipos). Node **22** para el backend/AI SDK.
-- AI: Vercel AI SDK, ocho proveedores, claves cifradas sólo en el servidor, configuración compartida entre dispositivos. Sugerencias de commit, Smart Commit y guardar para después siguen disponibles. Ver `docs/AI_CONFIGURATION.md`.
+- AI: Vercel AI SDK, ocho proveedores directos y Vercel AI Gateway (administrado o BYOK), conexiones guardadas por proveedor, claves cifradas sólo en el servidor, configuración compartida entre dispositivos. Sugerencias de commit, Smart Commit y guardar para después siguen disponibles. Ver `docs/AI_CONFIGURATION.md`.
 - Idiomas de sugerencias: **English** y **Match project**; el default es **Match project** (`auto`). Preferencias antiguas en Español se normalizan a `auto`; English y las claves existentes se conservan.
-- Modelos: selector con búsqueda, precios separados de entrada/salida en USD por millón de tokens, caché y fallback incluido. OpenRouter usa su API pública; los otros proveedores, models.dev. Precio desconocido no significa gratis. Mantener el ID manual avanzado para modelos privados.
+- Modelos: selector con búsqueda, precios separados de entrada/salida en USD por millón de tokens, caché y fallback incluido. OpenRouter y Vercel AI Gateway usan sus APIs públicas; los proveedores directos restantes, models.dev. Precio desconocido no significa gratis. Mantener el ID manual avanzado para modelos privados.
 - Editor: pestaña **Files**, CodeMirror 6 y lenguajes cargados bajo demanda. Edita archivos existentes UTF-8 de hasta 1 MiB, conserva borradores en memoria y detecta cambios externos. Guardar no hace stage/commit. Ver `docs/FILE_EDITOR.md`.
 
 - Mobile: debajo de 768 px usa menú de repositorios y vistas separadas de historial/cambios/detalle. El editor pliega el explorador y los diálogos se adaptan al viewport. Ver `docs/MOBILE_LAYOUT.md`.
