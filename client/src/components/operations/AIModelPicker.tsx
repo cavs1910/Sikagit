@@ -37,6 +37,7 @@ export function AIModelPicker({
     [query, setQuery] = useState(""),
     [sort, setSort] = useState("recent"),
     [freeOnly, setFreeOnly] = useState(false),
+    [structuredOnly, setStructuredOnly] = useState(true),
     [shown, setShown] = useState(80),
     [refresh, setRefresh] = useState(0);
   const request = useRef(0);
@@ -78,7 +79,8 @@ export function AIModelPicker({
             [model.id, model.name].some((text) =>
               text.toLowerCase().includes(query.toLowerCase()),
             )) &&
-          (!freeOnly || (model.inputPrice === 0 && model.outputPrice === 0)),
+          (!freeOnly || (model.inputPrice === 0 && model.outputPrice === 0)) &&
+          (!structuredOnly || model.structuredOutput === true),
       )
       .sort((a, b) =>
         sort === "input"
@@ -92,7 +94,7 @@ export function AIModelPicker({
               : (b.released || "").localeCompare(a.released || "") ||
                 a.name.localeCompare(b.name),
       );
-  }, [catalog, provider, query, sort, freeOnly]);
+  }, [catalog, provider, query, sort, freeOnly, structuredOnly]);
   return (
     <div className="space-y-3 min-w-0">
       <div className="flex items-center justify-between gap-2">
@@ -142,11 +144,22 @@ export function AIModelPicker({
             <option value="name">Name A–Z</option>
           </select>
         </div>
-        <div className="flex items-center justify-between gap-2 px-3 py-2 text-[0.65rem] text-text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-[0.65rem] text-text-muted">
           <span>
             {loading ? "Loading models…" : matches.length + " models"} · USD /
             1M tokens
           </span>
+          <label className="flex items-center gap-1.5" title="Show models with declared JSON schema support. Disable to include JSON compatibility and unverified models.">
+            <input
+              type="checkbox"
+              checked={structuredOnly}
+              onChange={(e) => {
+                setStructuredOnly(e.target.checked);
+                setShown(80);
+              }}
+            />
+            JSON schema support
+          </label>
           <label className="flex items-center gap-1.5">
             <input
               type="checkbox"
@@ -159,6 +172,9 @@ export function AIModelPicker({
             Free only
           </label>
         </div>
+        {structuredOnly && <p className="px-3 pb-2 text-[0.65rem] text-text-muted">
+          Models with declared structured output support. Disable the filter to include JSON compatibility and unverified models.
+        </p>}
         <div className="grid grid-cols-[minmax(0,1fr)_75px_75px] gap-2 px-3 py-1.5 border-y border-border text-[0.65rem] text-text-muted">
           <span>Model</span>
           <span className="text-right">Input / 1M</span>
@@ -264,6 +280,9 @@ export function AIModelPicker({
               ? " · Cached input: " + price(selected.cacheReadPrice) + " / 1M"
               : ""}
           </p>
+          {structuredOnly && selected && selected.structuredOutput !== true && (
+            <p className="text-warning">Your selected model is hidden by this filter and remains selected.</p>
+          )}
           {selected?.structuredOutput === false && (
             <p className="text-warning">
               This catalog does not list JSON schema support. JSON text
