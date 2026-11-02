@@ -18,7 +18,7 @@ fs.writeFileSync(path.join(repo,'tracked.txt'),'original\n');git('add','.');git(
 const sec = require('/app/server/dist/server/src/security.js');
 const services = require('/app/server/dist/server/src/services/gitService.js');
 const headers = {Authorization:'Basic '+Buffer.from('audit:'+password).toString('base64'),'Content-Type':'application/json'};
-const fixtureFile=path.join(tmp,'ai-fixture.json'); process.env.AI_TEST_FIXTURE=fixtureFile; process.env.AI_TEST_CATALOG_LOG=path.join(tmp,'catalog-requests.jsonl');
+const fixtureFile=path.join(tmp,'ai-fixture.json'); process.env.AI_TEST_FIXTURE=fixtureFile; process.env.AI_TEST_CATALOG_LOG=path.join(tmp,'catalog-requests.jsonl'); process.env.AI_TEST_GATEWAY_LOG=path.join(tmp,'gateway-requests.jsonl');
 const child = spawn(process.execPath,['--require','/tests/ai-provider-mock.cjs','/app/server/dist/server/src/index.js'],{env:process.env,stdio:['ignore','ignore','pipe']});
 let logs='';child.stderr.on('data',d=>{logs+=d;});
 const ready = (async()=>{for(let i=0;i<100;i++){try{const r=await fetch(base+'/api/v1/health',{headers});if(r.ok)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error('Server did not start: '+logs.slice(-1000));})();
@@ -288,5 +288,58 @@ test('AI language defaults to project language and migrates legacy Spanish witho
   const response=await aiSettings({language:'auto'});assert.equal(response.response.status,200);assert.equal(JSON.parse(fs.readFileSync(filename,'utf8')).language,'auto');assert.equal(JSON.parse(fs.readFileSync(filename,'utf8')).secret,legacy.secret);
   assert.equal((await aiSettings({language:'es'})).response.status,400);
   assert.equal((await aiSettings({language:'en'})).data.data.language,'en');
+ }finally{fs.writeFileSync(filename,previous);}
+});
+
+
+test('Gateway managed and BYOK requests use saved, separately encrypted credentials and preserve direct connections',async()=>{
+ const key='fake-gateway-key',byok='fake-provider-byok-key',direct='fake-direct-retained';
+ await aiSettings({provider:'openai',model:'direct-model',apiKey:direct,enabled:true});
+ let saved=await aiSettings({provider:'vercel',model:'openai/test-model',apiKey:key,gatewayMode:'managed',enabled:true});
+ assert.equal(saved.response.status,200);assert.equal(saved.data.data.connections.openai.hasApiKey,true);
+ aiOutput({ok:true});assert.equal((await request('/api/v1/ai/test',{apiKey:'request-body-must-not-win',byokApiKey:'ignored'})).status,200);
+ const calls=()=>fs.readFileSync(process.env.AI_TEST_GATEWAY_LOG,'utf8').trim().split('\n').map(JSON.parse);
+ let call=calls().at(-1);assert.equal(call.headers.authorization,'Bearer '+key);assert.equal(call.redirect,'error');assert.equal(call.headers['ai-language-model-id'],'openai/test-model');assert.equal(call.body.providerOptions?.gateway,undefined);
+ saved=await aiSettings({gatewayMode:'byok',byokProvider:'openai',byokApiKey:byok});assert.equal(saved.response.status,200);assert.equal(saved.data.data.hasByokKey,true);
+ assert.equal((await request('/api/v1/ai/test',{})).status,200);
+ call=calls().at(-1);assert.deepEqual(call.body.providerOptions.gateway,{only:['openai'],byok:{openai:[{apiKey:byok}]}});
+ assert.equal(call.headers.authorization,'Bearer '+key);
+ await aiSettings({responseMode:'json'});fs.writeFileSync(fixtureFile,JSON.stringify({output:{ok:true},warnings:[{type:'other',message:'fake-private-warning-key'}]}));assert.equal((await request('/api/v1/ai/test',{})).status,200);assert.equal(logs.includes('fake-private-warning-key'),false);
+ const disk=fs.readFileSync(path.join(tmp,'data/ai-settings.json'),'utf8');const publicText=JSON.stringify((await (await request('/api/v1/ai/settings')).json()).data);
+ for(const secret of [key,byok,direct]){assert.equal(disk.includes(secret),false);assert.equal(publicText.includes(secret),false);}
+ assert.equal(fs.statSync(path.join(tmp,'data/ai-settings.json')).mode&0o777,0o600);
+ const parsed=JSON.parse(disk);for(const secret of [parsed.secret,parsed.byokSecret,parsed.connections.openai.secret]) assert.equal(publicText.includes(secret),false);
+ saved=await aiSettings({provider:'openai',model:'direct-model'});assert.equal(saved.response.status,200);assert.equal(saved.data.data.hasApiKey,true);
+ assert.equal(saved.data.data.connections.vercel.hasByokKey,true);
+ const settings=require('/app/server/dist/server/src/services/aiSettings.js');assert.equal(settings.configured().apiKey,direct);assert.equal(settings.configured().byokApiKey,undefined);
+});
+test('Gateway requires both keys for BYOK, never reuses another BYOK provider key, and sanitizes errors',async()=>{
+ let saved=await aiSettings({provider:'vercel',model:'openai/test-model',gatewayMode:'byok',byokProvider:'openai'});assert.equal(saved.response.status,200);
+ assert.equal((await aiSettings({byokProvider:'anthropic'})).response.status,400);
+ assert.equal((await aiSettings({removeByokKey:true})).response.status,400);
+ assert.equal((await aiSettings({removeKey:true})).response.status,400);
+ assert.equal((await aiSettings({model:'missing-provider-prefix'})).response.status,400);
+ assert.equal((await aiSettings({byokProvider:'http://foreign.invalid'})).response.status,400);
+ await aiSettings({gatewayMode:'managed'});aiOutput({ok:true});assert.equal((await request('/api/v1/ai/test',{})).status,200);
+ let call=JSON.parse(fs.readFileSync(process.env.AI_TEST_GATEWAY_LOG,'utf8').trim().split('\n').at(-1));assert.equal(call.body.providerOptions?.gateway,undefined);
+ await aiSettings({gatewayMode:'byok'});aiOutput({},401);const failure=await request('/api/v1/ai/test',{});const message=await failure.text();assert.equal(failure.status,400);assert.match(message,/API key|permissions/);assert.equal(message.includes('fake-private-marker'),false);
+ await aiSettings({enabled:false,removeByokKey:true});assert.equal((await request('/api/v1/ai/test',{})).status,400);
+ saved=await aiSettings({gatewayMode:'managed',removeKey:true});assert.equal(saved.data.data.hasApiKey,false);assert.equal(saved.data.data.connections.openai.hasApiKey,true);
+});
+test('Gateway catalog normalizes its own prices, filters non-language models, and sends no credentials',async()=>{
+ const catalog=require('/app/server/dist/server/src/services/modelCatalog.js');
+ const data={data:[{id:'openai/gateway-model',name:'Gateway fixture',type:'language',modalities:{input:['text'],output:['text']},pricing:{input:'0.000002',output:'0.000008',input_cache_read:'0.000001'},context_window:128000,supported_parameters:['structured_outputs'],released:1735689600},{id:'openai/embedding',type:'embedding',modalities:{input:['text'],output:['text']}},{id:'lab/unknown',type:'language',modalities:{input:['text'],output:['text']}}]};
+ const models=catalog.normalizeModels('vercel',data);assert.equal(models.length,2);const model=models.find(m=>m.id==='openai/gateway-model');assert.equal(model.inputPrice,2);assert.equal(model.outputPrice,8);assert.equal(model.cacheReadPrice,1);assert.equal(model.contextWindow,128000);assert.equal(model.structuredOutput,true);assert.equal(models.find(m=>m.id==='lab/unknown').inputPrice,null);
+ fs.writeFileSync(fixtureFile,JSON.stringify({catalog:data}));const result=await (await request('/api/v1/ai/models?provider=vercel')).json();assert.equal(result.success,true);assert.equal(result.data.sourceType,'live');assert.equal(result.data.sourceURL,'https://ai-gateway.vercel.sh/v1/models');assert.equal(result.data.models.length,2);
+ const call=fs.readFileSync(process.env.AI_TEST_CATALOG_LOG,'utf8').trim().split('\n').map(JSON.parse).find(c=>c.url==='https://ai-gateway.vercel.sh/v1/models');assert.equal(call.hasAuthorization,false);assert.equal(call.redirect,'error');
+ assert.equal((await fetch(base+'/api/v1/ai/models?provider=vercel')).status,401);
+});
+test('Gateway offline catalog uses its bundled source and legacy settings migrate without losing keys',async()=>{
+ const modulePath='/app/server/dist/server/src/services/modelCatalog.js';const original=global.fetch;const cacheFile=path.join(tmp,'data/ai-model-catalog.json'),priorCache=fs.readFileSync(cacheFile);
+ try {fs.unlinkSync(cacheFile);delete require.cache[require.resolve(modulePath)];global.fetch=async()=>{throw new Error('offline');};const catalog=require(modulePath);const cached=await catalog.getModelCatalog('vercel',true);assert.equal(cached.sourceType,'snapshot');assert.ok(cached.models.length);assert.equal(cached.sourceName,'Vercel AI Gateway API');assert.match(cached.warning,/unavailable|catalog/i);
+ }finally{global.fetch=original;fs.writeFileSync(cacheFile,priorCache);}
+ const settings=require('/app/server/dist/server/src/services/aiSettings.js'),filename=path.join(tmp,'data/ai-settings.json');const previous=fs.readFileSync(filename,'utf8');
+ try {const saved=JSON.parse(previous);const direct=saved.connections.openai;const legacy={...saved,provider:'openai',model:direct.model,secret:direct.secret};delete legacy.connections;delete legacy.byokSecret;delete legacy.gatewayMode;delete legacy.byokProvider;fs.writeFileSync(filename,JSON.stringify(legacy));
+ const before=settings.publicSettings();assert.equal(before.hasApiKey,true);assert.equal(before.connections.openai.hasApiKey,true);settings.saveSettings({...before,enabled:false});assert.equal(settings.configured(false).apiKey,'fake-direct-retained');assert.equal(JSON.parse(fs.readFileSync(filename,'utf8')).secret,direct.secret);
  }finally{fs.writeFileSync(filename,previous);}
 });
