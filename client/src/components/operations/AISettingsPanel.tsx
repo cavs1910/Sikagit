@@ -4,6 +4,7 @@ import { api, type AISettings } from "../../lib/api";
 import { refreshAISettings } from "../../lib/aiSettings";
 import { useUIStore } from "../../store/uiStore";
 const providers = [
+  ["vercel", "Vercel AI Gateway"],
   ["openai", "OpenAI"],
   ["anthropic", "Anthropic"],
   ["google", "Google Gemini"],
@@ -19,6 +20,8 @@ export function AISettingsPanel() {
   const [s, setS] = useState<AISettings | null>(null),
     [key, setKey] = useState(""),
     [removeKey, setRemoveKey] = useState(false),
+    [byokKey, setByokKey] = useState(""),
+    [removeByokKey, setRemoveByokKey] = useState(false),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState(""),
     [dirty, setDirty] = useState(false);
@@ -45,10 +48,12 @@ export function AISettingsPanel() {
     setMessage("");
     try {
       setS(
-        await api.aiSaveSettings({ ...s, apiKey: key || undefined, removeKey }),
+        await api.aiSaveSettings({ ...s, apiKey: key || undefined, removeKey, byokApiKey: byokKey || undefined, removeByokKey }),
       );
       setKey("");
       setRemoveKey(false);
+      setByokKey("");
+      setRemoveByokKey(false);
       setDirty(false);
       await refreshAISettings();
       setMessage("Configuration saved on the server.");
@@ -93,9 +98,13 @@ export function AISettingsPanel() {
           <span>Provider</span>
           <select
             className={field}
+            aria-label="Provider"
             value={s.provider}
             onChange={(e) => {
-              update({ provider: e.target.value, model: "", hasApiKey: false });
+              const provider = e.target.value;
+              update({ provider, ...(s.connections?.[provider] || { model: "", hasApiKey: false, hasByokKey: false, gatewayMode: "managed", byokProvider: "openai" }) });
+              setByokKey("");
+              setRemoveByokKey(false);
               setKey("");
               setRemoveKey(false);
             }}
@@ -122,17 +131,18 @@ export function AISettingsPanel() {
         />
         <label className="block space-y-1">
           <span>
-            API key {s.hasApiKey && !removeKey ? "· saved securely" : ""}
+            {s.provider === "vercel" ? "Gateway API key" : "API key"} {s.hasApiKey && !removeKey ? "· saved securely" : ""}
           </span>
           <input
             type="password"
             autoComplete="new-password"
             className={field}
+            aria-label={s.provider === "vercel" ? "Gateway API key" : "API key"}
             value={key}
             placeholder={
               s.hasApiKey && !removeKey
                 ? "Leave blank to keep the saved key"
-                : "Enter your provider API key"
+                : s.provider === "vercel" ? "Enter your Vercel AI Gateway API key" : "Enter your provider API key"
             }
             onChange={(e) => {
               setKey(e.target.value);
@@ -153,10 +163,38 @@ export function AISettingsPanel() {
             Remove saved key
           </label>
         )}
+        {s.provider === "vercel" && <div className="space-y-3 border-t border-border pt-3">
+          <a href="https://vercel.com/docs/ai-gateway/authentication-and-byok" target="_blank" rel="noopener noreferrer" className="text-accent underline">Gateway setup and BYOK requirements</a>
+          <label className="block space-y-1">
+            <span>Gateway credentials</span>
+            <select aria-label="Gateway credentials" className={field} value={s.gatewayMode} onChange={e => update({ gatewayMode: e.target.value as AISettings["gatewayMode"] })}>
+              <option value="managed">Gateway managed · no provider key in SikaGit</option>
+              <option value="byok">Bring your own provider key (BYOK)</option>
+            </select>
+          </label>
+          {s.gatewayMode === "byok" && <>
+            <label className="block space-y-1">
+              <span>BYOK provider</span>
+              <select aria-label="BYOK provider" className={field} value={s.byokProvider} onChange={e => {
+                update({ byokProvider: e.target.value, hasByokKey: false }); setByokKey(""); setRemoveByokKey(false);
+              }}>
+                {providers.filter(([id]) => !["vercel", "openrouter"].includes(id)).map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            </label>
+            <label className="block space-y-1">
+              <span>Provider API key {s.hasByokKey && !removeByokKey ? "· saved securely" : ""}</span>
+              <input aria-label="Provider API key" type="password" autoComplete="new-password" className={field} value={byokKey}
+                placeholder={s.hasByokKey && !removeByokKey ? "Leave blank to keep the saved provider key" : "Enter your BYOK provider API key"}
+                onChange={e => { setByokKey(e.target.value); setDirty(true); }} />
+            </label>
+            {s.hasByokKey && <label className="flex items-center gap-2"><input type="checkbox" checked={removeByokKey} onChange={e => { setRemoveByokKey(e.target.checked); setDirty(true); }} />Remove saved BYOK key</label>}
+            <p className="text-text-muted">Both keys are required. SikaGit sends the provider key through Vercel and restricts routing to your BYOK provider. Choose a model served by that provider. Vercel may fall back to its credits if your key fails; a successful test does not confirm BYOK billing.</p>
+          </>}
+          {s.gatewayMode !== "byok" && <p className="text-text-muted">Uses your Gateway account’s routing and credits. BYOK configured in your Vercel dashboard may also apply. No provider key is sent by SikaGit in this mode.</p>}
+        </div>}
         <p className="text-text-muted">
-          Keys are encrypted on the server and never returned to the browser.
-          Selected diffs are sent directly to the chosen provider when you
-          request a suggestion. No Vercel account or gateway is required.
+          Keys are encrypted on the server and never returned to the browser. Saved connections are kept separately so you can switch providers.
+          {s.provider === "vercel" ? " Selected diffs are sent through Vercel AI Gateway when you request a suggestion." : " Selected diffs are sent directly to the chosen provider when you request a suggestion."}
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3">
@@ -263,7 +301,7 @@ export function AISettingsPanel() {
         </button>
         <button
           className="px-4 py-2 rounded border border-border disabled:opacity-40"
-          disabled={busy || dirty || !s.hasApiKey || !s.model}
+          disabled={busy || dirty || !s.hasApiKey || !s.model || (s.provider === "vercel" && s.gatewayMode === "byok" && !s.hasByokKey)}
           onClick={test}
         >
           Test saved connection

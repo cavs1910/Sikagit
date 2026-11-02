@@ -7,11 +7,13 @@ import bundled from "../catalog/ai-models.snapshot.json";
 
 type Provider = (typeof providers)[number];
 const MODELS_DEV = "https://models.dev/api.json";
+const VERCEL = "https://ai-gateway.vercel.sh/v1/models";
 const OPENROUTER = "https://openrouter.ai/api/v1/models";
 const TTL = 6 * 60 * 60 * 1000;
 const RETRY_AFTER = 60 * 1000;
 const MAX_BYTES = 12 * 1024 * 1024;
 const pricing: Record<Provider, string> = {
+  vercel: "https://vercel.com/ai-gateway/models",
   openai: "https://openai.com/api/pricing/",
   anthropic: "https://www.anthropic.com/pricing#api",
   google: "https://ai.google.dev/gemini-api/docs/pricing",
@@ -44,7 +46,18 @@ function boolean(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
 export function normalizeModels(provider: Provider, data: any): AIModelInfo[] {
-  const router = provider === "openrouter";
+  const gateway = provider === "vercel";
+  const router = provider === "openrouter" || gateway;
+  if (gateway) {
+    if (!Array.isArray(data?.data)) throw new Error("Invalid model catalog");
+    data = { data: data.data.filter((m: any) => m?.type === "language").map((m: any) => ({
+      ...m,
+      architecture: { input_modalities: m.modalities?.input, output_modalities: m.modalities?.output },
+      pricing: { prompt: m.pricing?.input, completion: m.pricing?.output, input_cache_read: m.pricing?.input_cache_read },
+      context_length: m.context_window,
+      created: m.released ?? m.created,
+    })) };
+  }
   const records = router
     ? data?.data
     : Object.values(data?.[provider]?.models || {});
@@ -145,10 +158,10 @@ function info(
     sourceType,
     stale: Date.now() - Date.parse(updatedAt) > TTL,
     sourceName:
-      provider === "openrouter"
+      provider === "vercel" ? "Vercel AI Gateway API" : provider === "openrouter"
         ? "OpenRouter API"
         : "models.dev · community catalog",
-    sourceURL: provider === "openrouter" ? OPENROUTER : MODELS_DEV,
+    sourceURL: provider === "vercel" ? VERCEL : provider === "openrouter" ? OPENROUTER : MODELS_DEV,
     pricingURL: pricing[provider],
     warning,
   };
@@ -257,12 +270,12 @@ async function fetchCatalog(url: string) {
 }
 async function update(provider: Provider) {
   const data = await fetchCatalog(
-    provider === "openrouter" ? OPENROUTER : MODELS_DEV,
+    provider === "vercel" ? VERCEL : provider === "openrouter" ? OPENROUTER : MODELS_DEV,
   );
   const updatedAt = new Date().toISOString();
-  for (const id of provider === "openrouter"
-    ? ["openrouter" as Provider]
-    : providers.filter((p) => p !== "openrouter")) {
+  for (const id of provider === "openrouter" || provider === "vercel"
+    ? [provider]
+    : providers.filter((p) => p !== "openrouter" && p !== "vercel")) {
     try {
       current.set(id, info(id, normalizeModels(id, data), updatedAt, "live"));
     } catch {
@@ -278,7 +291,7 @@ export async function getModelCatalog(
 ): Promise<AIModelCatalog> {
   const provider = catalogProvider(value);
   load();
-  const key = provider === "openrouter" ? "openrouter" : "modelsdev";
+  const key = provider === "vercel" ? "vercel" : provider === "openrouter" ? "openrouter" : "modelsdev";
   const cached = current.get(provider);
   if (cached && Date.now() - Date.parse(cached.updatedAt) < TTL && !refresh)
     return info(provider, cached.models, cached.updatedAt, "cache");
@@ -313,8 +326,8 @@ export async function getModelCatalog(
   const snapshot = (bundled as any)[provider];
   return info(
     provider,
-    snapshot.models,
-    snapshot.updatedAt,
+    snapshot?.models || [],
+    snapshot?.updatedAt || new Date(0).toISOString(),
     "snapshot",
     warning || "Using the bundled catalog. Refresh to check current prices.",
   );

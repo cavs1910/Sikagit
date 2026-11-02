@@ -218,7 +218,7 @@ export const api = {
   }),
 
   aiSettings: () => request<AISettings>('/ai/settings'),
-  aiSaveSettings: (settings: AISettings & {apiKey?:string;removeKey?:boolean}) => request<AISettings>('/ai/settings',{method:'PUT',body:JSON.stringify(settings)}),
+  aiSaveSettings: (settings: AISettings & {apiKey?:string;removeKey?:boolean;byokApiKey?:string;removeByokKey?:boolean}) => request<AISettings>('/ai/settings',{method:'PUT',body:JSON.stringify(settings)}),
   aiTest: () => request<{ok:boolean}>('/ai/test',{method:'POST',body:'{}'}),
   // AI
   aiSuggest: (repo: string) =>
@@ -250,4 +250,5 @@ export const api = {
     }),
 };
 
-export interface AISettings { revision:string; enabled:boolean; provider:string; model:string; hasApiKey:boolean; language:'en'|'auto'; conventionalCommits:boolean; maxDiffChars:number; maxOutputTokens:number; responseMode:'structured'|'json'; }
+export interface AIConnection { model:string; hasApiKey:boolean; gatewayMode:'managed'|'byok'; byokProvider:string; hasByokKey:boolean; }
+export interface AISettings extends AIConnection { connections:Record<string,AIConnection>; revision:string; enabled:boolean; provider:string; language:'en'|'auto'; conventionalCommits:boolean; maxDiffChars:number; maxOutputTokens:number; responseMode:'structured'|'json'; }
