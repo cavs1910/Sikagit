@@ -170,11 +170,19 @@ body {
     gap: 0.5rem;
   }
   .staging-panels .opacity-0 { opacity: 1; }
-  .status-bar { gap: 0.5rem; overflow: hidden; }
-  .status-bar > div, .status-bar span { min-width: 0; }
-  .status-bar > div:first-child { max-width: 40%; }
-  .status-bar > div:first-child span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .status-bar > span:last-child { display: none; }
+  .status-bar {
+    position: relative;
+    justify-content: center;
+    gap: 0;
+    overflow: hidden;
+    padding-left: max(2rem, env(safe-area-inset-left));
+    padding-right: max(2rem, env(safe-area-inset-right));
+  }
+  .status-bar > :not(.status-branch):not(.status-activity) { display: none; }
+  .status-branch { min-width: 0; max-width: 100%; }
+  .status-branch span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status-activity { position: absolute; right: max(0.75rem, env(safe-area-inset-right)); }
+  .status-activity span { display: none; }
   .app-dialog { max-height: 90dvh; }
   .settings-layout { flex-direction: column; }
   .settings-layout > div:first-child {

@@ -22,6 +22,12 @@ Dialogs fit the viewport, settings tabs scroll horizontally, and the application
 uses dynamic viewport height and bottom safe-area padding. Git operations,
 authentication, AI behavior and server paths are unchanged.
 
+The mobile bottom status bar centers the branch name, truncates long names and
+omits the desktop counters and SikaGit label to keep text away from rounded
+corners. Activity remains visible as a compact spinner with an accessible label
+and tooltip. Horizontal safe-area padding and the existing bottom safe-area
+padding remain in place.
+
 ## Verification
 
 Use mocked API responses and disposable data for browser verification. Check

@@ -26,8 +26,8 @@ export function StatusBar() {
     <div className="status-bar shrink-0 h-6 bg-bg-secondary border-t border-border flex items-center px-3 text-xs text-text-secondary gap-4">
       {status && (
         <>
-          <div className="flex items-center gap-1">
-            <GitBranch size={12} />
+          <div className="status-branch flex items-center gap-1" title={status.current || 'detached'}>
+            <GitBranch size={12} className="shrink-0" />
             <span>{status.current || 'detached'}</span>
           </div>
           {status.tracking && (
@@ -54,7 +54,9 @@ export function StatusBar() {
       <div className="flex-1" />
       {activityLabel && (
         <div
-          className="flex items-center gap-1.5 text-accent"
+          className="status-activity flex items-center gap-1.5 text-accent"
+          role="status"
+          aria-label={activityLabel}
           title={activities.length > 1 ? activities.map(a => a.label).join('\n') : activityLabel}
         >
           <Loader2 size={11} className="animate-spin" />
