@@ -403,9 +403,26 @@ export function MainContent() {
 
       </div>
 
-      <div className="flex gap-1 px-3 py-1 border-b border-border bg-bg-secondary shrink-0" role="tablist" aria-label="Repository workspace">
-        <button role="tab" aria-selected={workspaceTab==='git'} onClick={()=>setWorkspaceTab('git')} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='git'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>History &amp; Changes</button>
-        <button role="tab" aria-selected={workspaceTab==='files'} onClick={()=>{setFilesOpened(true);setWorkspaceTab('files');}} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='files'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>Files</button>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-1 border-b border-border bg-bg-secondary shrink-0">
+        <div className="flex gap-1" role="tablist" aria-label="Repository workspace">
+          <button role="tab" aria-selected={workspaceTab==='git'} onClick={()=>setWorkspaceTab('git')} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='git'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>History &amp; Changes</button>
+          <button role="tab" aria-selected={workspaceTab==='files'} onClick={()=>{setFilesOpened(true);setWorkspaceTab('files');}} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='files'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>Files</button>
+        </div>
+        {workspaceTab === 'git' && (
+          <button
+            type="button"
+            role="switch"
+            aria-checked={showReflog}
+            onClick={() => setShowReflog(!showReflog)}
+            title="Include commits recoverable from the reflog"
+            className="flex shrink-0 items-center gap-2 rounded py-1 text-xs text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-accent"
+          >
+            Show reflog
+            <span aria-hidden="true" className={cn('inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full border p-[2px] transition-colors', showReflog ? 'bg-accent border-accent' : 'bg-bg-tertiary border-border')}>
+              <span className={cn('block h-[12px] w-[12px] shrink-0 rounded-full bg-white shadow-sm transition-transform', showReflog ? 'translate-x-[14px]' : 'translate-x-0')} />
+            </span>
+          </button>
+        )}
       </div>
       {mobile && workspaceTab === 'git' && <nav className="flex shrink-0 gap-2 p-2 border-b border-border" aria-label="Git views">
         {(['history', 'changes'] as const).map(tab => <button key={tab} aria-pressed={mobileTab === tab && !selectedCommit && !selectedFile} className={cn('px-3 py-2 rounded text-xs', mobileTab === tab && !selectedCommit && !selectedFile ? 'bg-accent/10 text-accent' : 'bg-bg-secondary text-text-secondary')} onClick={() => { selectCommit(null); selectFile(null); setMobileTab(tab); }}>{tab === 'history' ? 'History' : 'Changes'}</button>)}
@@ -423,22 +440,6 @@ export function MainContent() {
         >
           {/* Commit list */}
           <div className={cn("flex-1 flex flex-col overflow-hidden min-h-0", mobile && mobileTab !== 'history' && "hidden")}>
-            <div className="min-h-8 flex shrink-0 items-center justify-between gap-2 px-3 border-b border-border bg-bg-secondary text-xs text-text-secondary">
-              <span>History</span>
-              <button
-                type="button"
-                role="switch"
-                aria-checked={showReflog}
-                onClick={() => setShowReflog(!showReflog)}
-                title="Include commits recoverable from the reflog"
-                className="flex items-center gap-2 rounded py-1 hover:text-text-primary focus-visible:outline-2 focus-visible:outline-accent"
-              >
-                Show reflog
-                <span aria-hidden="true" className={cn('relative h-[18px] w-8 rounded-full border transition-colors', showReflog ? 'bg-accent border-accent' : 'bg-bg-tertiary border-border')}>
-                  <span className={cn('absolute top-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-[left]', showReflog ? 'left-[17px]' : 'left-[2px]')} />
-                </span>
-              </button>
-            </div>
             <CommitList
               repoPath={repo.path}
               onBranchAction={async (branch, action) => {

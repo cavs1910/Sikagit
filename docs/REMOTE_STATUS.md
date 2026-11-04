@@ -19,7 +19,8 @@ also show the label:
 - **Only local**: not found in the known remote-tracking history.
 - **Publication unknown**: the check failed or exceeded its bounded traversal.
 
-The history toolbar's **Show reflog** switch is off by default. The normal view
+In **History & Changes**, the **Show reflog** switch beside the workspace tabs
+is off by default. The normal view
 uses `git log --all`, showing history reachable from current refs (including
 local branches, remote-tracking branches and tags). Enable the switch to also
 include commits recoverable from reflogs, such as commits replaced by squash or
