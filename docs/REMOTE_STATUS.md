@@ -60,3 +60,20 @@ and run `node tests/history.browser.cjs` with Playwright and Chromium available.
 client, and `SIKAGIT_TEST_ORIGIN` overrides the Vite URL. This fixture mocks all
 API responses and checks the switch on mobile/desktop, saved preferences,
 pagination reset, selection clearing and rejection of a stale page response.
+
+
+## Repository website link
+
+The toolbar shows the remote host’s logo as an icon-only link beside publication
+status. It opens the repository website in a new tab. GitHub, GitLab, Bitbucket,
+Codeberg and Azure DevOps have platform logos; self-hosted HTTPS remotes use a
+neutral Git logo because their platform cannot be inferred reliably. Known-host
+SSH/scp remotes are converted to website URLs, including Azure DevOps SSH paths.
+Unknown SSH hosts and unsupported transports have no inferred website link.
+Credentials and query/fragment parameters are never included in the browser link.
+
+This visual detection does not enable a new Git integration. This private
+installation only allows configuring HTTPS GitHub remote URLs through the app,
+and its credential helper only supplies GitHub credentials to github.com. Local
+Git/editor features can work on repositories from other hosts; authenticated
+fetch/push support needs separately reviewed host credentials and policy changes.
