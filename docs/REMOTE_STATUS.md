@@ -38,6 +38,17 @@ the history and status. An external change needs a history refresh. A remote may
 have changed without this server knowing. Remote tags alone do not establish
 publication because Git does not track their remote provenance here.
 
+Repository selection synchronously swaps the visible Git state before the next
+render. The browser keeps memory-only caches for up to eight repositories;
+history caches retain at most 1,000 commits and restore pagination. Returning to
+a repository shows its own cached status, refs and history while refreshing;
+without a cache it shows loading. Selections reset, editor drafts stay keyed by
+repository, and optimistic staging state is isolated per repository. Replies
+from a repository left in the background can update only that repository's
+cache. Newer requests supersede older requests for the same data, including
+status, branches, tags, history and selected commit files. These caches never
+replace a network refresh or persist repository contents in localStorage.
+
 The server classifies a requested page with a batch `rev-list` walk that excludes
 all remote-tracking history. This detects ancestors even when the remote tip is
 outside the visible page. It does not make a network request or launch Git per

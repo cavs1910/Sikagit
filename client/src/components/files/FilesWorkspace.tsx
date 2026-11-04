@@ -1,3 +1,4 @@
+import { useUIStore } from '../../store/uiStore';
 import { useMobile } from '../../hooks/useMobile';
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
@@ -159,8 +160,8 @@ export function FilesWorkspace({
   const tabs = Object.entries(documents).filter(
     ([, item]) => item.repo === repoPath,
   );
-  const [showIgnored, setShowIgnored] = useState(false),
-    [refresh, setRefresh] = useState(0),
+  const showIgnored = useUIStore(s => s.showIgnoredFiles);
+  const [refresh, setRefresh] = useState(0),
     [filter, setFilter] = useState(""),
     [showTree, setShowTree] = useState(true);
   const treeVisible = showTree || (mobile && !doc);
@@ -253,14 +254,6 @@ export function FilesWorkspace({
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
-        </label>
-        <label className="flex items-center gap-2 p-3 text-xs text-text-secondary">
-          <input
-            type="checkbox"
-            checked={showIgnored}
-            onChange={(e) => setShowIgnored(e.target.checked)}
-          />
-          Show Git-ignored files
         </label>
         <div className="flex-1 overflow-auto">
           <Directory

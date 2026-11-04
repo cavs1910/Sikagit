@@ -175,7 +175,8 @@ interface FileStatusPanelProps {
 }
 
 export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
-  const { status, fetchStatus, selectedFile, selectedFileSource, selectFile, checkedFiles, toggleFileCheck, setCheckedFiles, clearChecked, applyOptimisticStage, applyOptimisticUnstage, clearPendingForPaths } = useStatusStore();
+  const { status: loadedStatus, loadedRepo, fetchStatus, selectedFile, selectedFileSource, selectFile, checkedFiles, toggleFileCheck, setCheckedFiles, clearChecked, applyOptimisticStage, applyOptimisticUnstage, clearPendingForPaths } = useStatusStore();
+  const status = loadedRepo === repoPath ? loadedStatus : null;
   const selectedCommit = useLogStore(s => s.selectedCommit);
   const commitFiles = useLogStore(s => s.commitFiles);
   const commitFilesLoading = useLogStore(s => s.commitFilesLoading);
@@ -323,9 +324,10 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
       });
       if (!confirmed) return;
     }
+    if (useRepoStore.getState().activeRepo()?.path !== repoPath) return;
     selectFile(file?.path ?? null, source);
     if (file) selectCommit(null);
-  }, [selectFile, selectCommit, confirm]);
+  }, [selectFile, selectCommit, confirm, repoPath]);
 
   const selectNextInList = useCallback((list: GitFileStatus[], file: string, source: 'staged' | 'unstaged') => {
     if (selectedFile !== file || selectedFileSource !== source) return;
@@ -368,13 +370,14 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
       });
       if (!confirmed) return;
     }
+    if (useRepoStore.getState().activeRepo()?.path !== repoPath) return;
     selectNextInList(unstagedFiles, file.path, 'unstaged');
     applyOptimisticStage([file.path]);
     try {
       await withActivity(`Staging ${fileName(file.path)}`, () => api.stageFiles(repoPath, [file.path]));
       refresh();
     } catch (err) {
-      clearPendingForPaths([file.path]);
+      clearPendingForPaths([file.path], repoPath);
       await refresh();
       handleGitError(err, () => stageFile(file));
     }
@@ -387,7 +390,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
       await withActivity(`Unstaging ${fileName(file)}`, () => api.unstageFiles(repoPath, [file]));
       refresh();
     } catch (err) {
-      clearPendingForPaths([file]);
+      clearPendingForPaths([file], repoPath);
       await refresh();
       handleGitError(err, () => unstageFile(file));
     }
@@ -402,7 +405,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
       await withActivity(`Staging ${files.length} file${files.length !== 1 ? 's' : ''}`, () => api.stageFiles(repoPath, files));
       refresh();
     } catch (err) {
-      clearPendingForPaths(files);
+      clearPendingForPaths(files, repoPath);
       await refresh();
       handleGitError(err, () => stageAll());
     }
@@ -417,7 +420,7 @@ export function FileStatusPanel({ repoPath }: FileStatusPanelProps) {
       await withActivity(`Unstaging ${files.length} file${files.length !== 1 ? 's' : ''}`, () => api.unstageFiles(repoPath, files));
       refresh();
     } catch (err) {
-      clearPendingForPaths(files);
+      clearPendingForPaths(files, repoPath);
       await refresh();
       handleGitError(err, () => unstageAll());
     }

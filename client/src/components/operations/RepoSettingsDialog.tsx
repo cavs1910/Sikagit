@@ -1,3 +1,5 @@
+import { useConfirmStore } from '../../store/confirmStore';
+import { useUIStore } from '../../store/uiStore';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Settings, Loader2, CheckCircle2, XCircle, Bookmark, GitBranch, FolderOpen, Upload, Trash2, FolderSearch, FolderKanban } from 'lucide-react';
 import type { RepoBookmark } from '@sikagit/shared';
@@ -23,6 +25,22 @@ const tabs: { id: Tab; label: string; icon: typeof Bookmark }[] = [
 type RemoteStatus = 'idle' | 'checking' | 'valid' | 'invalid';
 
 export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
+  const removeRepo = useRepoStore(s => s.removeRepo);
+  const confirm = useConfirmStore(s => s.confirm);
+  const demoMode = useUIStore(s => s.demoMode);
+  const handleRemove = async () => {
+    const confirmed = await confirm({
+      title: 'Remove Repository',
+      message: demoMode
+        ? 'Remove this repository from SikaGit? This will not delete repository files on disk.'
+        : `Remove "${repo.name}" from SikaGit? This will not delete repository files on disk.`,
+      confirmLabel: 'Remove', variant: 'danger',
+    });
+    if (!confirmed) return;
+    await removeRepo(repo.id);
+    if (!useRepoStore.getState().repos.some(r => r.id === repo.id)) onClose();
+    else setError(useRepoStore.getState().error || 'Failed to remove repository');
+  };
   const updateRepo = useRepoStore(s => s.updateRepo);
   const fetchAll = useStatusStore(s => s.fetchAll);
   const projects = useProjectStore(s => s.projects);
@@ -357,6 +375,12 @@ export function RepoSettingsDialog({ repo, onClose }: RepoSettingsDialogProps) {
                   </div>
                 </div>
 
+                <div className="border-t border-border pt-4">
+                  <button type="button" onClick={() => void handleRemove()} className="flex items-center gap-2 rounded border border-danger/40 px-3 py-2 text-xs text-danger hover:bg-danger/10">
+                    <Trash2 size={14} />Remove repository
+                  </button>
+                  <p className="mt-1 text-[0.6rem] text-text-muted">Removes the bookmark from SikaGit. Files on disk are kept.</p>
+                </div>
                 {/* Path (editable — change if the folder was moved or renamed) */}
                 <div>
                   <label className="block text-xs text-text-secondary mb-1.5 font-medium">Local Path</label>

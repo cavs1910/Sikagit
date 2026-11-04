@@ -26,6 +26,7 @@ interface UIState {
   groupFilesByFolder: boolean;
   autoFetchOnOpen: boolean;
   showReflog: boolean;
+  showIgnoredFiles: boolean;
   demoMode: boolean;
   aiEnabled: boolean;
   aiConfigured: boolean;
@@ -50,6 +51,7 @@ interface UIState {
   setGroupFilesByFolder: (v: boolean) => void;
   setAutoFetchOnOpen: (v: boolean) => void;
   setShowReflog: (v: boolean) => void;
+  setShowIgnoredFiles: (v: boolean) => void;
   setDemoMode: (v: boolean) => void;
   setAiEnabled: (v: boolean) => void;
   setBackgroundSmartCommit: (v: boolean) => void;
@@ -91,6 +93,7 @@ export const useUIStore = create<UIState>()(
       groupFilesByFolder: true,
       autoFetchOnOpen: true,
       showReflog: false,
+      showIgnoredFiles: false,
       demoMode: false,
       aiEnabled: false,
       aiConfigured: false,
@@ -134,6 +137,7 @@ export const useUIStore = create<UIState>()(
       setGroupFilesByFolder: (v: boolean) => set({ groupFilesByFolder: v }),
       setAutoFetchOnOpen: (v: boolean) => set({ autoFetchOnOpen: v }),
       setShowReflog: (v: boolean) => set({ showReflog: v }),
+      setShowIgnoredFiles: (v: boolean) => set({ showIgnoredFiles: v }),
       setDemoMode: (v: boolean) => set({ demoMode: v }),
       setAiEnabled: (v: boolean) => set({ aiEnabled: v }),
       setBackgroundSmartCommit: (v: boolean) => set({ backgroundSmartCommit: v }),

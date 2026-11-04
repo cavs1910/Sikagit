@@ -26,6 +26,8 @@ Este archivo permite trabajar sin el chat original. Leelo antes de cambiar el pr
 - Modelos: selector con búsqueda, precios separados de entrada/salida en USD por millón de tokens, caché y fallback incluido. OpenRouter y Vercel AI Gateway usan sus APIs públicas; los proveedores directos restantes, models.dev. Precio desconocido no significa gratis. Mantener el ID manual avanzado para modelos privados.
 - Editor: pestaña **Files**, CodeMirror 6 y lenguajes cargados bajo demanda. Edita archivos existentes UTF-8 de hasta 1 MiB, conserva borradores en memoria y detecta cambios externos. Guardar no hace stage/commit. Ver `docs/FILE_EDITOR.md`.
 
+- Estado por repo: cachés en memoria separadas por ruta (hasta 8 repos, historial hasta 1.000 commits), selección sincronizada y respuestas tardías aisladas. Switch de ignorados junto a Files; cabecera móvil con repo/rama/settings; quitar bookmark dentro de Settings. Ver `docs/MOBILE_LAYOUT.md` y `docs/REMOTE_STATUS.md`.
+
 - Publicación: indicador de rama junto a Push y nubes por commit, basados en referencias remotas locales (último Fetch), sin consultas de red por fila. Ver `docs/REMOTE_STATUS.md`.
 
 - Login: formulario propio con `express-session` y sesiones revocables de 365 días en la SQLite existente; `AUTH_FILE` conserva el usuario/contraseña. Shell y assets públicos en el servicio privado, APIs y Socket.IO autenticados. Ver `docs/AUTHENTICATION.md`.
@@ -71,5 +73,5 @@ Leé `docs/SECURITY_REVIEW.md` antes de cambiar Git, autenticación, rutas o Doc
 
 - Se reportó una carga lenta al volver después de horas. El contenedor no se había reiniciado ni sufrido OOM; mediciones posteriores eran rápidas. No quedó una traza del navegador que identifique la causa exacta.
 - Falta feedback más claro de etapas de carga, tiempos y reintentos; `client/src/lib/api.ts` no establece timeout general. La primera descarga del bundle se observó sin compresión. Auto-fetch puede consultar GitHub al abrir un repo, pero no debe impedir mostrar primero el estado local.
-- Hubo errores `bad object` con hashes que existen en cleanui. Investigar posible estado obsoleto/cruzado al cambiar repositorio, especialmente `logStore.fetchCommitFiles`, `CommitDetail` y selección de commits. Es un indicio, no un diagnóstico confirmado de la demora ni prueba de corrupción.
-- Estos pendientes están documentados para una tarea futura; no se consideran implementados por este archivo.
+- Hubo errores `bad object` con hashes que existen en cleanui. Ahora se aíslan status, refs, historial, selección y archivos de commit por repositorio, con pruebas A → B → A y respuestas fuera de orden. Esto corrige cruces de estado reproducibles; no confirma la causa exacta de aquel reporte ni de la demora original, ni indica corrupción.
+- La demora original y el feedback general de carga siguen pendientes de una traza que permita diagnosticarlos; la separación de estado por repo sí está implementada y probada.

@@ -1,3 +1,5 @@
+import '../../lib/repoSelection';
+import { RepositoryHeader } from './RepositoryHeader';
 import { Menu, X } from 'lucide-react';
 import { useMobile } from '../../hooks/useMobile';
 import { useRepoStore } from '../../store/repoStore';
@@ -19,6 +21,8 @@ export function AppShell() {
   const mobile = useMobile();
   const [menuOpen, setMenuOpen] = useState(false);
   const activeRepoId = useRepoStore(s => s.activeRepoId);
+  const repo = useRepoStore(s => s.repos.find(r => r.id === s.activeRepoId));
+  const reposLoading = useRepoStore(s => s.loading);
   useEffect(() => { setMenuOpen(false); }, [activeRepoId, mobile]);
   useEffect(() => {
     if (!menuOpen) return;
@@ -47,11 +51,11 @@ export function AppShell() {
   return (
     <div className={cn('app-shell flex flex-col h-dvh overflow-hidden', demoMode && 'demo-mode')}>
       <EditorDraftGuard />
-      {mobile && <header className="h-12 flex items-center gap-3 px-3 py-1 border-b border-border bg-bg-secondary shrink-0">
+      {mobile && <header className="h-12 flex items-center gap-2 px-3 py-1 border-b border-border bg-bg-secondary shrink-0">
         <button aria-label={menuOpen ? 'Close repositories' : 'Open repositories'} aria-expanded={menuOpen} aria-controls="mobile-repositories" onClick={() => setMenuOpen(open => !open)} className="p-2 rounded hover:bg-bg-tertiary">
           {menuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
-        <span className="font-semibold text-sm">SikaGit</span>
+        {repo ? <RepositoryHeader key={repo.path} repo={repo} mobile /> : <span className="text-sm text-text-muted truncate">{reposLoading ? 'Loading repository…' : 'Select a repository'}</span>}
       </header>}
       {mobile && menuOpen && <>
         <button aria-label="Close repositories" className="fixed inset-0 top-12 bg-black/60 z-30" onClick={() => setMenuOpen(false)} />

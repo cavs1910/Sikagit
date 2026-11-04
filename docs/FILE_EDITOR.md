@@ -1,6 +1,6 @@
 # Repository file editor
 
-Open a repository and select **Files**, next to **History & Changes**. The explorer displays folders on demand, including unchanged and untracked files. Use **Show Git-ignored files** to include ignored files; `.git` remains hidden. The filename filter applies to files in expanded folders. Refresh the tree after external file creation, deletion or renaming.
+Open a repository and select **Files**, next to **History & Changes**. The explorer displays folders on demand, including unchanged and untracked files. The **Show Git-ignored files** switch beside the workspace tabs includes ignored files; it uses the same control as **Show reflog**, defaults to off and is saved in the existing browser UI preferences. `.git` remains hidden. The filename filter applies to files in expanded folders. Refresh the tree after external file creation, deletion or renaming.
 
 Click a text file to open it. Diff file headers in **History & Changes** also include an **Open in editor** button that switches to Files and selects the working-tree file. From a historical commit, this opens the current file on disk. Existing drafts are preserved; deleted or unsupported files show the editor’s normal read error. Multiple files can remain open in tabs. **Save** and **Cmd/Ctrl+S** write to the original server file; saving does not stage or commit anything. The Git status and sidebar indicator refresh after a successful save. Switch back to **History & Changes** to review, stage and commit.
 

@@ -7,6 +7,8 @@ import { useToastStore } from '../../store/toastStore';
 import { cn } from '../../lib/utils';
 import type { GitBranch as GitBranchType } from '@sikagit/shared';
 
+const emptyBranches: GitBranchType[] = [];
+
 // "remotes/origin/feature" -> "origin/feature"
 const remoteLabel = (name: string) => name.replace(/^remotes\//, '');
 
@@ -15,9 +17,11 @@ const remoteLabel = (name: string) => name.replace(/^remotes\//, '');
  * dropdown of all local + remote branches. Selecting one switches to it via the
  * safe /git/switch-branch endpoint (creates a tracking branch for remotes).
  */
-export function BranchSwitcher({ repoPath, onMerge }: { repoPath: string; onMerge: () => void }) {
-  const branches = useStatusStore(s => s.branches);
-  const status = useStatusStore(s => s.status);
+export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPath: string; onMerge: () => void; compact?: boolean }) {
+  const branches = useStatusStore(s => s.loadedRepo === repoPath ? s.branches : emptyBranches);
+  const status = useStatusStore(s => s.loadedRepo === repoPath ? s.status : null);
+  const ready = useStatusStore(s => s.loadedRepo === repoPath && s.branchesLoaded);
+  const loading = useStatusStore(s => s.loading);
   const fetchAll = useStatusStore(s => s.fetchAll);
   const fetchLog = useLogStore(s => s.fetchLog);
   const addToast = useToastStore(s => s.addToast);
@@ -28,7 +32,7 @@ export function BranchSwitcher({ repoPath, onMerge }: { repoPath: string; onMerg
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const current = status?.current || branches.find(b => b.current)?.name || 'HEAD (detached)';
+  const current = status?.current || branches.find(b => b.current)?.name || (ready ? 'HEAD (detached)' : loading ? 'Loading branches…' : 'Branches unavailable');
 
   const { local, remote } = useMemo(() => {
     const f = filter.trim().toLowerCase();
@@ -66,8 +70,8 @@ export function BranchSwitcher({ repoPath, onMerge }: { repoPath: string; onMerg
       setFilter('');
       fetchAll(repoPath);
       fetchLog(repoPath);
-    } catch (err: any) {
-      addToast('error', err?.message || 'Failed to switch branch');
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : 'Failed to switch branch');
     } finally {
       setSwitching(null);
     }
@@ -77,16 +81,18 @@ export function BranchSwitcher({ repoPath, onMerge }: { repoPath: string; onMerg
     <div ref={ref} className="relative flex-shrink-0">
       <button
         onClick={() => setOpen(o => !o)}
+        disabled={!ready}
         title={`Current branch: ${current} — click to switch`}
         aria-expanded={open}
         className={cn(
-          'flex items-center gap-1.5 max-w-[220px] px-2 py-1 rounded-md text-xs border bg-bg-primary transition-colors',
+          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs border bg-bg-primary transition-colors disabled:opacity-60',
+          compact ? 'max-w-[40vw]' : 'max-w-[220px]',
           open
             ? 'border-accent/50 text-text-primary'
             : 'border-border text-text-secondary hover:text-text-primary hover:border-accent/40'
         )}
       >
-        <GitBranch size={12} className="text-accent flex-shrink-0" />
+        {!ready && loading ? <Loader2 size={12} className="animate-spin flex-shrink-0" /> : <GitBranch size={12} className="text-accent flex-shrink-0" />}
         <span className="truncate font-medium">{current}</span>
         <ChevronDown size={12} className="text-text-muted flex-shrink-0" />
       </button>

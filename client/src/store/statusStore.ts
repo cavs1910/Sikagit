@@ -3,6 +3,7 @@ import type { GitStatus, GitBranch, GitTag, GitFileStatus } from '@sikagit/share
 import { api } from '../lib/api';
 import { useRepoStatusStore } from './repoStatusStore';
 import { useRepoStore } from './repoStore';
+import { rememberRepo } from '../lib/repoCache';
 
 // Keep the left sidebar's status dot (changes color + ahead/behind) in sync with
 // the active repo's freshly-loaded status, so it updates right after any action
@@ -26,14 +27,12 @@ function syncSidebarFromStatus(repoPath: string, status: GitStatus) {
   });
 }
 
-// Path of the most recently *requested* status. A reply is only applied while
-// its repo is still the latest one asked for, so a slow `git status` from the
-// repo you just left can't overwrite the one now open.
-let latestStatusRepo: string | null = null;
-
 type SelectedFileSource = 'staged' | 'unstaged';
 
 interface StatusState {
+  loadedRepo: string | null;
+  branchesLoaded: boolean;
+  activateRepo: (repo: string | null) => void;
   status: GitStatus | null;
   branches: GitBranch[];
   tags: GitTag[];
@@ -57,7 +56,7 @@ interface StatusState {
   clearChecked: () => void;
   applyOptimisticStage: (paths: string[]) => void;
   applyOptimisticUnstage: (paths: string[]) => void;
-  clearPendingForPaths: (paths: string[]) => void;
+  clearPendingForPaths: (paths: string[], repo?: string) => void;
 }
 
 // Must match server's partition in gitService.getStatus — a file with both
@@ -126,85 +125,58 @@ function reconcileWithPending(
   };
 }
 
-export const useStatusStore = create<StatusState>()((set) => ({
-  status: null,
-  branches: [],
-  tags: [],
+type Snapshot = Pick<StatusState, 'status' | 'branches' | 'tags' | 'branchesLoaded' | 'pendingStaged' | 'pendingUnstaged'>;
+const emptySnapshot = (): Snapshot => ({ status: null, branches: [], tags: [], branchesLoaded: false, pendingStaged: new Set(), pendingUnstaged: new Set() });
+const cache = new Map<string, Snapshot>();
+const snapshotOf = ({ status, branches, tags, branchesLoaded, pendingStaged, pendingUnstaged }: Snapshot): Snapshot =>
+  ({ status, branches, tags, branchesLoaded, pendingStaged, pendingUnstaged });
+const requests = new Map<string, number>();
+const pending = new Map<string, number>();
+let sequence = 0;
+
+async function fetchPart<K extends 'status' | 'branches' | 'tags'>(repo: string, part: K, read: () => Promise<Snapshot[K]>) {
+  const key = JSON.stringify([repo, part]), seq = ++sequence;
+  requests.set(key, seq);
+  pending.set(repo, (pending.get(repo) || 0) + 1);
+  if (useStatusStore.getState().loadedRepo === repo) useStatusStore.setState({ loading: true, error: null });
+  try {
+    const value = await read();
+    if (requests.get(key) !== seq) return;
+    const state = useStatusStore.getState();
+    const snapshot = state.loadedRepo === repo ? snapshotOf(state) : cache.get(repo) || emptySnapshot();
+    const update = part === 'status'
+      ? reconcileWithPending(value as GitStatus, snapshot.pendingStaged, snapshot.pendingUnstaged)
+      : { [part]: value, ...(part === 'branches' ? { branchesLoaded: true } : {}) };
+    rememberRepo(cache, repo, { ...snapshot, ...update });
+    if (useStatusStore.getState().loadedRepo === repo) useStatusStore.setState(update);
+    if (part === 'status') syncSidebarFromStatus(repo, value as GitStatus);
+  } catch (err) {
+    if (requests.get(key) === seq && useStatusStore.getState().loadedRepo === repo) useStatusStore.setState({ error: (err as Error).message });
+  } finally {
+    const count = (pending.get(repo) || 1) - 1;
+    if (count) pending.set(repo, count); else pending.delete(repo);
+    if (useStatusStore.getState().loadedRepo === repo) useStatusStore.setState({ loading: count > 0 });
+  }
+}
+
+export const useStatusStore = create<StatusState>()((set, get) => ({
+  ...emptySnapshot(),
+  loadedRepo: null,
   loading: false,
   error: null,
   selectedFile: null,
   selectedFileSource: null,
   checkedFiles: new Set<string>(),
-  pendingStaged: new Set<string>(),
-  pendingUnstaged: new Set<string>(),
 
-  fetchStatus: async (repo: string) => {
-    latestStatusRepo = repo;
-    try {
-      const fetched = await api.getStatus(repo);
-      if (latestStatusRepo !== repo) return; // repo switched meanwhile — stale reply
-      set((state) => {
-        const r = reconcileWithPending(fetched, state.pendingStaged, state.pendingUnstaged);
-        return {
-          status: r.status,
-          pendingStaged: r.pendingStaged,
-          pendingUnstaged: r.pendingUnstaged,
-        };
-      });
-      syncSidebarFromStatus(repo, fetched);
-    } catch (err: any) {
-      if (latestStatusRepo !== repo) return;
-      set({ error: err.message });
-    }
-  },
-
-  fetchBranches: async (repo: string) => {
-    try {
-      const branches = await api.getBranches(repo);
-      set({ branches });
-    } catch (err: any) {
-      set({ error: err.message });
-    }
-  },
-
-  fetchTags: async (repo: string) => {
-    try {
-      const tags = await api.getTags(repo);
-      set({ tags });
-    } catch (err: any) {
-      set({ error: err.message });
-    }
-  },
-
-  fetchAll: async (repo: string) => {
-    latestStatusRepo = repo;
-    // `loading` only drives the status bar's "Refreshing…" label; the panels keep
-    // showing the current data until the fresh reply replaces it in place.
-    set({ loading: true, error: null });
-    try {
-      const [fetched, branches, tags] = await Promise.all([
-        api.getStatus(repo),
-        api.getBranches(repo),
-        api.getTags(repo),
-      ]);
-      if (latestStatusRepo !== repo) return; // repo switched meanwhile — stale reply
-      set((state) => {
-        const r = reconcileWithPending(fetched, state.pendingStaged, state.pendingUnstaged);
-        return {
-          status: r.status,
-          branches,
-          tags,
-          loading: false,
-          pendingStaged: r.pendingStaged,
-          pendingUnstaged: r.pendingUnstaged,
-        };
-      });
-      syncSidebarFromStatus(repo, fetched);
-    } catch (err: any) {
-      if (latestStatusRepo !== repo) return;
-      set({ error: err.message, loading: false });
-    }
-  },
+  activateRepo: (repo) => set({
+    ...(repo ? cache.get(repo) : null) || emptySnapshot(),
+    loadedRepo: repo, loading: !!repo, error: null,
+    selectedFile: null, selectedFileSource: null, checkedFiles: new Set(),
+  }),
+  fetchStatus: (repo) => fetchPart(repo, 'status', () => api.getStatus(repo)),
+  fetchBranches: (repo) => fetchPart(repo, 'branches', () => api.getBranches(repo)),
+  fetchTags: (repo) => fetchPart(repo, 'tags', () => api.getTags(repo)),
+  fetchAll: async (repo) => { await Promise.all([get().fetchStatus(repo), get().fetchBranches(repo), get().fetchTags(repo)]); },
 
   selectFile: (path, source) => set({
     selectedFile: path,
@@ -256,13 +228,26 @@ export const useStatusStore = create<StatusState>()((set) => ({
     };
   }),
 
-  clearPendingForPaths: (paths) => set((state) => {
-    const nextPendingStaged = new Set(state.pendingStaged);
-    const nextPendingUnstaged = new Set(state.pendingUnstaged);
-    for (const p of paths) {
-      nextPendingStaged.delete(p);
-      nextPendingUnstaged.delete(p);
+  clearPendingForPaths: (paths, repo = get().loadedRepo || undefined) => {
+    if (repo && repo !== get().loadedRepo) {
+      const saved = cache.get(repo);
+      if (saved) rememberRepo(cache, repo, { ...saved, pendingStaged: new Set([...saved.pendingStaged].filter(p => !paths.includes(p))), pendingUnstaged: new Set([...saved.pendingUnstaged].filter(p => !paths.includes(p))) });
+      return;
     }
-    return { pendingStaged: nextPendingStaged, pendingUnstaged: nextPendingUnstaged };
-  }),
+    set((state) => {
+      const nextPendingStaged = new Set(state.pendingStaged);
+      const nextPendingUnstaged = new Set(state.pendingUnstaged);
+      for (const p of paths) {
+        nextPendingStaged.delete(p);
+        nextPendingUnstaged.delete(p);
+      }
+      return { pendingStaged: nextPendingStaged, pendingUnstaged: nextPendingUnstaged };
+    });
+  },
 }));
+
+useStatusStore.subscribe(state => {
+  if (!state.loadedRepo) return;
+  const { status, branches, tags, branchesLoaded, pendingStaged, pendingUnstaged } = state;
+  rememberRepo(cache, state.loadedRepo, { status, branches, tags, branchesLoaded, pendingStaged, pendingUnstaged });
+});

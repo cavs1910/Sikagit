@@ -21,8 +21,13 @@ const ROW_HEIGHT = 28;
 
 export function CommitList({ repoPath, onBranchAction }: CommitListProps) {
   const parentRef = useRef<HTMLDivElement>(null);
-  const { commits, totalLanes, loading, hasMore, loadMore, fetchLog, selectedCommit, selectCommit } = useLogStore();
-  const { status, selectFile } = useStatusStore();
+  const log = useLogStore();
+  const { totalLanes, hasMore, loadMore, fetchLog, selectedCommit, selectCommit } = log;
+  const commits = log.loadedRepo === repoPath ? log.commits : [];
+  const loading = log.loadedRepo !== repoPath || log.loading;
+  const git = useStatusStore();
+  const { selectFile } = git;
+  const status = git.loadedRepo === repoPath ? git.status : null;
   const {
     colGraphWidth, setColGraphWidth,
     colTypeWidth, setColTypeWidth,

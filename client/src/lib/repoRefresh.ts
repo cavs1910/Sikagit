@@ -6,7 +6,8 @@ import { useRepoStatusStore } from '../store/repoStatusStore';
 /**
  * Single entry point for (re)loading the OPEN repo's local state — commit graph,
  * branches/tags and working-tree status — straight from the server, which runs
- * git for every call (nothing is cached for the open repo, on either side).
+ * git for every call. Per-repo browser caches provide an immediate view while
+ * these requests refresh it; no history/status response is reused by the server.
  *
  * Triggers (`reason`):
  *   - 'open'     the active repo changed: sidebar click, deep link, browser

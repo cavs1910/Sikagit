@@ -14,9 +14,9 @@ import { CommitDetail } from '../log/CommitDetail';
 import { FileDiffPanel } from '../diff/FileDiffPanel';
 import { FileStatusPanel } from '../files/FileStatusPanel';
 import { ResizeHandle } from '../ui/ResizeHandle';
-import { BranchSwitcher } from './BranchSwitcher';
-import { RepoSettingsDialog } from '../operations/RepoSettingsDialog';
-import { GitBranch, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2, Settings, Trash2 } from 'lucide-react';
+import { RepositoryHeader } from './RepositoryHeader';
+import { ToolbarSwitch } from '../ui/ToolbarSwitch';
+import { GitBranch, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2 } from 'lucide-react';
 import { MergeDialog } from '../operations/MergeDialog';
 import { useProjectStore } from '../../store/projectStore';
 import { cn } from '../../lib/utils';
@@ -34,11 +34,17 @@ export function MainContent() {
   const [mobileTab, setMobileTab] = useState<'history' | 'changes'>('history');
   const repos = useRepoStore(s => s.repos);
   const activeRepoId = useRepoStore(s => s.activeRepoId);
-  const removeRepo = useRepoStore(s => s.removeRepo);
   const repo = repos.find(r => r.id === activeRepoId);
-  const { fetchLog, selectedCommit, selectCommit } = useLogStore();
-  const { fetchAll, selectedFile, selectFile, status } = useStatusStore();
-  const { commitListWidth, setCommitListWidth, bottomPanelHeight, setBottomPanelHeight, demoMode, showReflog, setShowReflog } = useUIStore();
+  const log = useLogStore();
+  const { fetchLog, selectCommit } = log;
+  const selectedCommit = log.loadedRepo === repo?.path ? log.selectedCommit : null;
+  const selectedCommitFile = log.loadedRepo === repo?.path ? log.selectedCommitFile : null;
+  const git = useStatusStore();
+  const { fetchAll, selectFile } = git;
+  const status = git.loadedRepo === repo?.path ? git.status : null;
+  const selectedFile = git.loadedRepo === repo?.path ? git.selectedFile : null;
+  const selectedFileSource = git.loadedRepo === repo?.path ? git.selectedFileSource : null;
+  const { commitListWidth, setCommitListWidth, bottomPanelHeight, setBottomPanelHeight, showReflog, setShowReflog, showIgnoredFiles, setShowIgnoredFiles } = useUIStore();
   const projects = useProjectStore(s => s.projects);
   const confirm = useConfirmStore(s => s.confirm);
   const repoProject = activeRepoId ? projects.find(p => p.repoIds.includes(activeRepoId)) : undefined;
@@ -46,7 +52,6 @@ export function MainContent() {
   const [workspaceTab, setWorkspaceTab] = useState<'git' | 'files'>('git');
   const [filesOpened, setFilesOpened] = useState(false);
   const [remoteAction, setRemoteAction] = useState<'fetch' | 'pull' | 'push' | null>(null);
-  const [showRepoSettings, setShowRepoSettings] = useState(false);
   const [showMergeDialog, setShowMergeDialog] = useState(false);
   const [mergePreselect, setMergePreselect] = useState<string | undefined>();
   const addToast = useToastStore(s => s.addToast);
@@ -59,11 +64,12 @@ export function MainContent() {
   useEffect(() => {
     // Close the changes panel when switching repos
     setMobileTab('history');
-    selectCommit(null);
-    selectFile(null);
+    setShowMergeDialog(false);
+    setMergePreselect(undefined);
+    setRemoteAction(null);
 
     if (repo) void refreshRepo(repo.path, 'open');
-  }, [repo?.id, selectCommit, selectFile]);
+  }, [repo?.id, repo?.path, selectCommit, selectFile]);
 
   // Auto background-fetch on repo open (opt-out via Settings → General).
   // Best-effort: keeps the behind/pull indicator honest without the user
@@ -102,7 +108,7 @@ export function MainContent() {
       setRemoteAction(prev => (prev === 'fetch' ? null : prev));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [repo?.id]);
+  }, [repo?.id, repo?.path]);
 
   const handleCommitListResize = useCallback((delta: number) => {
     setCommitListWidth(commitListWidth + delta);
@@ -282,7 +288,7 @@ export function MainContent() {
     <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
       {/* Toolbar */}
       <div className="repo-toolbar group h-10 bg-bg-secondary border-b border-border flex items-center px-3 gap-2">
-        {repoProject && (
+        {!mobile && repoProject && (
           <div className="flex items-center gap-1.5">
             {repoProject.avatar ? (
               <img src={repoProject.avatar} alt="" className="h-4 max-w-[32px] rounded-sm object-contain" />
@@ -293,35 +299,10 @@ export function MainContent() {
             <ChevronRight size={14} className="text-text-muted" />
           </div>
         )}
-        <span className="text-sm font-semibold text-text-primary demo-blur">{repo.name}</span>
-        <div className="flex items-center gap-0.5 ml-1">
-          <button
-            onClick={() => setShowRepoSettings(true)}
-            className="p-1 rounded hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
-            title="Repository settings"
-          >
-            <Settings size={12} />
-          </button>
-          <button
-            onClick={async () => {
-              const confirmed = await confirm({
-                title: 'Remove Repository',
-                message: demoMode
-                  ? 'Are you sure you want to remove this repository from SikaGit? This will not delete the repository files on disk.'
-                  : `Are you sure you want to remove "${repo.name}" from SikaGit? This will not delete the repository files on disk.`,
-                confirmLabel: 'Remove',
-                variant: 'danger',
-              });
-              if (confirmed) removeRepo(repo.id);
-            }}
-            className="p-1 rounded hover:bg-danger/20 text-text-muted hover:text-danger transition-colors"
-            title="Remove repository"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-        <BranchSwitcher repoPath={repo.path} onMerge={() => { setMergePreselect(undefined); setShowMergeDialog(true); }} />
-        <span className="repo-path text-xs text-text-secondary flex-1 demo-blur">{repo.displayPath}</span>
+        {!mobile && <>
+          <RepositoryHeader key={repo.path} repo={repo} />
+          <span className="repo-path text-xs text-text-secondary flex-1 demo-blur">{repo.displayPath}</span>
+        </>}
 
         {/* Remote actions */}
         {status && hasRemote && (
@@ -395,21 +376,9 @@ export function MainContent() {
           <button role="tab" aria-selected={workspaceTab==='git'} onClick={()=>setWorkspaceTab('git')} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='git'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>History &amp; Changes</button>
           <button role="tab" aria-selected={workspaceTab==='files'} onClick={()=>{setFilesOpened(true);setWorkspaceTab('files');}} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='files'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>Files</button>
         </div>
-        {workspaceTab === 'git' && (
-          <button
-            type="button"
-            role="switch"
-            aria-checked={showReflog}
-            onClick={() => setShowReflog(!showReflog)}
-            title="Include commits recoverable from the reflog"
-            className="flex shrink-0 items-center gap-2 rounded py-1 text-xs text-text-secondary hover:text-text-primary focus-visible:outline-2 focus-visible:outline-accent"
-          >
-            Show reflog
-            <span aria-hidden="true" className={cn('inline-flex h-[18px] w-[32px] shrink-0 items-center rounded-full border p-[2px] transition-colors', showReflog ? 'bg-accent border-accent' : 'bg-bg-tertiary border-border')}>
-              <span className={cn('block h-[12px] w-[12px] shrink-0 rounded-full bg-white shadow-sm transition-transform', showReflog ? 'translate-x-[14px]' : 'translate-x-0')} />
-            </span>
-          </button>
-        )}
+        {workspaceTab === 'git'
+          ? <ToolbarSwitch label="Show reflog" title="Include commits recoverable from the reflog" checked={showReflog} onChange={setShowReflog} />
+          : <ToolbarSwitch label="Show Git-ignored files" title="Include files ignored by Git" checked={showIgnoredFiles} onChange={setShowIgnoredFiles} />}
       </div>
       {mobile && workspaceTab === 'git' && <nav className="flex shrink-0 gap-2 p-2 border-b border-border" aria-label="Git views">
         {(['history', 'changes'] as const).map(tab => <button key={tab} aria-pressed={mobileTab === tab && !selectedCommit && !selectedFile} className={cn('px-3 py-2 rounded text-xs', mobileTab === tab && !selectedCommit && !selectedFile ? 'bg-accent/10 text-accent' : 'bg-bg-secondary text-text-secondary')} onClick={() => { selectCommit(null); selectFile(null); setMobileTab(tab); }}>{tab === 'history' ? 'History' : 'Changes'}</button>)}
@@ -428,6 +397,7 @@ export function MainContent() {
           {/* Commit list */}
           <div className={cn("flex-1 flex flex-col overflow-hidden min-h-0", mobile && mobileTab !== 'history' && "hidden")}>
             <CommitList
+              key={repo.path}
               repoPath={repo.path}
               onBranchAction={async (branch, action) => {
                 if (action === 'merge') {
@@ -485,7 +455,7 @@ export function MainContent() {
 
           {/* Staging panels */}
           <div style={{ height: mobile ? undefined : bottomPanelHeight }} className={cn("flex-shrink-0 overflow-hidden", mobile && (mobileTab === 'changes' ? "flex-1 min-h-0" : "hidden"))}>
-            <FileStatusPanel repoPath={repo.path} />
+            <FileStatusPanel key={repo.path} repoPath={repo.path} />
           </div>
         </div>
 
@@ -495,16 +465,16 @@ export function MainContent() {
             {!mobile && <ResizeHandle direction="horizontal" onResize={handleCommitListResize} />}
             <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
               {selectedCommit ? (
-                <CommitDetail repoPath={repo.path} />
+                <CommitDetail key={JSON.stringify([repo.path, selectedCommit, selectedCommitFile])} repoPath={repo.path} />
               ) : (
-                <FileDiffPanel repoPath={repo.path} />
+                <FileDiffPanel key={JSON.stringify([repo.path, selectedFile, selectedFileSource])} repoPath={repo.path} />
               )}
             </div>
           </>
         )}
       </div>
 
-      {filesOpened && <div className={cn('flex-1 min-h-0 overflow-hidden',workspaceTab==='files'?'flex':'hidden')}><Suspense fallback={<div className="p-4 text-xs text-text-muted">Loading files…</div>}><FilesWorkspace repoPath={repo.path} visible={workspaceTab==='files'}/></Suspense></div>}
+      {filesOpened && <div className={cn('flex-1 min-h-0 overflow-hidden',workspaceTab==='files'?'flex':'hidden')}><Suspense fallback={<div className="p-4 text-xs text-text-muted">Loading files…</div>}><FilesWorkspace key={repo.path} repoPath={repo.path} visible={workspaceTab==='files'}/></Suspense></div>}
 
       {/* Merge dialog */}
       {showMergeDialog && repo && (
@@ -515,10 +485,6 @@ export function MainContent() {
         />
       )}
 
-      {/* Repo settings dialog */}
-      {showRepoSettings && repo && (
-        <RepoSettingsDialog repo={repo} onClose={() => setShowRepoSettings(false)} />
-      )}
     </div>
     </EditorNavigation.Provider>
   );

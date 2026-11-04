@@ -55,7 +55,10 @@ function extractHunkPatch(rawDiff: string, hunkGlobalIndex: number): string | nu
 }
 
 export function FileDiffPanel({ repoPath }: FileDiffPanelProps) {
-  const { selectedFile, selectedFileSource, selectFile, fetchStatus } = useStatusStore();
+  const git = useStatusStore();
+  const { selectFile, fetchStatus } = git;
+  const selectedFile = git.loadedRepo === repoPath ? git.selectedFile : null;
+  const selectedFileSource = git.loadedRepo === repoPath ? git.selectedFileSource : null;
   const [diff, setDiff] = useState<string>('');
   const [suppressed, setSuppressed] = useState<DiffWhitespaceSuppression[]>([]);
   const [loading, setLoading] = useState(false);

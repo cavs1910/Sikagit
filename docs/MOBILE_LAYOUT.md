@@ -4,6 +4,13 @@ Below 768 CSS pixels, SikaGit uses a repository drawer instead of the desktop
 sidebar. Selecting a repository, pressing Escape or tapping the backdrop closes
 it. Desktop sidebar visibility and saved panel sizes remain independent.
 
+The mobile header uses the space beside the drawer button for the repository
+name, branch selector and repository Settings button. Long names truncate.
+**Remove repository** is inside Settings and requires confirmation; it removes
+only the bookmark, preserving files on disk. Desktop uses the same controls.
+The workspace tab bar contains **Show reflog** for History & Changes and the
+matching **Show Git-ignored files** switch for Files.
+
 The branch picker keeps a **Merge…** button in its footer while the branch list
 scrolls independently. It opens the existing merge dialog for the current branch.
 
@@ -40,3 +47,11 @@ Use mocked API responses and disposable data for browser verification. Check
 - Check document overflow, visible staging controls and browser runtime errors.
 
 Do not use real repositories for write tests or invoke billable AI requests.
+
+With a freshly started Vite on loopback port 5184, run
+`node tests/repository-ui.browser.cjs` using Playwright/Chromium. Set
+`SIKAGIT_BROWSER_CLIENT` to use an existing browser client and
+`SIKAGIT_TEST_ORIGIN` to override the URL. This fixture mocks all responses,
+including delayed/out-of-order replies, and checks cache misses, A → B → A,
+status/branches/tags/history isolation, commit file selection, pending staging,
+both switches, mobile header and confirmed bookmark removal at 320/390/1280px.

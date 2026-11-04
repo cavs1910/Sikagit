@@ -1,9 +1,11 @@
+import { useRepoStore } from '../../store/repoStore';
 import { GitBranch, ArrowUp, ArrowDown, Loader2 } from 'lucide-react';
 import { useStatusStore } from '../../store/statusStore';
 import { useActivityStore } from '../../store/activityStore';
 
 export function StatusBar() {
-  const status = useStatusStore(s => s.status);
+  const repo = useRepoStore(s => s.repos.find(r => r.id === s.activeRepoId)?.path);
+  const status = useStatusStore(s => s.loadedRepo === repo ? s.status : null);
   const pendingStaged = useStatusStore(s => s.pendingStaged);
   const pendingUnstaged = useStatusStore(s => s.pendingUnstaged);
   const loading = useStatusStore(s => s.loading);
