@@ -29,11 +29,11 @@ test('foreign browser origin and missing credentials are rejected',async()=>{
  await ready;assert.equal((await fetch(base+'/api/v1/repos')).status,401);
  assert.equal((await request('/api/v1/repos',undefined,{Origin:'https://foreign.invalid'})).status,403);
  assert.equal((await request('/api/v1/repos',undefined,{'Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'cors'})).status,403);
- const status=await new Promise((resolve,reject)=>{require('node:http').get(base+'/api/v1/repos',{headers:{...headers,'Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'navigate'}},r=>{r.resume();resolve(r.statusCode);}).on('error',reject);});
+ const status=await new Promise((resolve,reject)=>{require('node:http').get(base+'/',{headers:{...headers,'Sec-Fetch-Site':'cross-site','Sec-Fetch-Mode':'navigate'}},r=>{r.resume();resolve(r.statusCode);}).on('error',reject);});
  assert.equal(status,200);
 });
 test('authenticated replies issue signed HttpOnly cookies; forgeries fail',async()=>{
- const r=await request('/api/v1/health');const cookie=r.headers.get('set-cookie');assert.match(cookie,/HttpOnly/);assert.match(cookie,/SameSite=Strict/);
+ const {response:r}=await signIn();const cookie=r.headers.get('set-cookie');assert.match(cookie,/HttpOnly/);assert.match(cookie,/SameSite=Strict/);
  assert.equal((await fetch(base+'/api/v1/repos',{headers:{Cookie:cookie.split(';')[0]}})).status,200);
  assert.equal((await fetch(base+'/api/v1/repos',{headers:{Cookie:'sikagit_session='+Date.now()+'.'+'a'.repeat(64)}})).status,401);
 });
@@ -42,8 +42,79 @@ test('anonymous Socket.IO does not crash the service',async()=>{
  assert.equal((await request('/api/v1/health')).status,200);
 });
 test('authenticated Socket.IO accepts the signed session cookie',async()=>{
- const r=await request('/api/v1/health');const cookie=r.headers.get('set-cookie').split(';')[0];
+ const {cookie}=await signIn();
  const s=await fetch(base+'/socket.io/?EIO=4&transport=polling',{headers:{Cookie:cookie,Origin:base}});assert.equal(s.status,200);assert.match(await s.text(),/^0\{/);
+});
+
+async function signIn(extra={}) {
+ await ready;
+ const response=await fetch(base+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json',Origin:base,...extra},body:JSON.stringify({username:'audit',password})});
+ assert.equal(response.status,200);
+ return {cookie:response.headers.getSetCookie()[0].split(';')[0],response,data:(await response.json()).data};
+}
+test('anonymous web app shell and assets load without a Basic challenge; private data remains protected',async()=>{
+ await ready;
+ const page=await fetch(base+'/r/fixture');assert.equal(page.status,200);assert.equal(page.headers.get('www-authenticate'),null);assert.match(page.headers.get('content-security-policy'),/script-src 'self'/);
+ const html=await page.text();const bundle=html.match(/src="([^\"]+\.js)"/)[1];assert.equal((await fetch(base+bundle)).status,200);
+ const manifest=await (await fetch(base+'/manifest.webmanifest')).json();assert.equal(manifest.display,'standalone');
+ const response=await fetch(base+'/api/v1/auth/session');assert.equal(response.headers.get('cache-control'),'no-store');assert.equal(response.headers.get('set-cookie'),null);
+ assert.deepEqual((await response.json()).data,{authenticated:false,expiresAt:null});
+ const privateResponse=await fetch(base+'/api/v1/repos');assert.equal(privateResponse.status,401);assert.equal(privateResponse.headers.get('www-authenticate'),null);assert.equal((await privateResponse.json()).success,false);
+ const db=require('/app/server/dist/server/src/services/db.js').db,count=()=>db.prepare('SELECT COUNT(*) AS n FROM auth_sessions').get().n;
+ const sessions=count();for(let i=0;i<3;i++){const probe=await request('/api/v1/health');assert.equal(probe.status,200);assert.equal(probe.headers.get('set-cookie'),null);}assert.equal(count(),sessions);
+});
+test('form login uses a one-year opaque cookie, stores only a hash, and never slides the expiry',async()=>{
+ const before=Date.now(),{cookie,response,data}=await signIn();
+ const value=response.headers.getSetCookie()[0];assert.match(value,/HttpOnly/);assert.match(value,/SameSite=Strict/);
+ const expires=Date.parse(value.match(/Expires=([^;]+)/i)[1]);assert.ok(Math.abs(expires-before-365*86400000)<3000);
+ assert.ok(Math.abs(data.expiresAt-before-365*86400000)<3000);
+ const repeated=await fetch(base+'/api/v1/auth/session',{headers:{Cookie:cookie}});assert.equal(repeated.headers.get('set-cookie'),null);assert.equal((await repeated.json()).data.expiresAt,data.expiresAt);
+ const token=decodeURIComponent(cookie.split('=')[1]).slice(2).split('.')[0];assert.match(token,/^[0-9a-f]{64}$/);
+ const db=require('/app/server/dist/server/src/services/db.js').db;
+ const row=db.prepare('SELECT * FROM auth_sessions WHERE id_hash = ?').get(crypto.createHash('sha256').update(token).digest('hex'));
+ assert.ok(row);assert.equal(JSON.stringify(row).includes(token),false);assert.equal(row.expires_at,data.expiresAt);
+ const forged=cookie.slice(0,-1)+(cookie.endsWith('a')?'b':'a');assert.equal((await fetch(base+'/api/v1/repos',{headers:{Cookie:forged}})).status,401);
+ db.prepare('UPDATE auth_sessions SET expires_at = ? WHERE id_hash = ?').run(Date.now()-1,row.id_hash);
+ assert.equal((await fetch(base+'/api/v1/repos',{headers:{Cookie:cookie}})).status,401);
+});
+test('login and logout enforce Origin and JSON, reject bad credentials, and revoke only this device',async()=>{
+ const malformed=await fetch(base+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json',Origin:base},body:'{"password":"'+password+'",'});assert.equal(malformed.status,400);assert.equal((await malformed.text()).includes(password),false);assert.equal(logs.includes(password),false);
+ const bad=await fetch(base+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json',Origin:base},body:JSON.stringify({username:'audit',password:'wrong'})});assert.equal(bad.status,401);assert.equal(bad.headers.get('set-cookie'),null);
+ assert.equal((await fetch(base+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'username=audit'})).status,415);
+ const first=await signIn(),second=await signIn();assert.notEqual(first.cookie,second.cookie);
+ for(const route of ['login','logout'])assert.equal((await fetch(base+'/api/v1/auth/'+route,{method:'POST',headers:{Cookie:first.cookie,Origin:'https://foreign.invalid','Content-Type':'application/json'},body:'{}'})).status,403);
+ const logout=await fetch(base+'/api/v1/auth/logout',{method:'POST',headers:{Cookie:first.cookie,Origin:base,'Content-Type':'application/json'},body:'{}'});assert.equal(logout.status,200);assert.match(logout.headers.getSetCookie()[0],/Expires=Thu, 01 Jan 1970/);
+ assert.equal((await fetch(base+'/api/v1/repos',{headers:{Cookie:first.cookie}})).status,401);
+ assert.equal((await fetch(base+'/api/v1/repos',{headers:{Cookie:second.cookie}})).status,200);
+ assert.equal((await (await request('/api/v1/auth/session')).json()).data.authenticated,false);
+ assert.equal((await request('/api/v1/repos',undefined,{'Sec-Fetch-Site':'same-origin'})).status,401);
+});
+test('logout disconnects an already authenticated Socket.IO connection and rejects its cookie on reconnect',async()=>{
+ const {io}=require('/app/node_modules/socket.io-client'),{cookie}=await signIn();
+ const socket=io(base,{transports:['websocket'],extraHeaders:{Cookie:cookie,Origin:base},reconnection:false});
+ try {
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Socket did not authenticate')),3000);socket.once('connect',()=>{clearTimeout(timer);resolve();});socket.once('connect_error',reject);});
+  const disconnected=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Socket not revoked')),3000);socket.once('disconnect',()=>{clearTimeout(timer);resolve();});});
+  const response=await fetch(base+'/api/v1/auth/logout',{method:'POST',headers:{Cookie:cookie,Origin:base,'Content-Type':'application/json'},body:'{}'});assert.equal(response.status,200);await disconnected;
+  assert.equal((await fetch(base+'/socket.io/?EIO=4&transport=polling',{headers:{Cookie:cookie,Origin:base}})).status,401);
+ }finally{socket.disconnect();}
+});
+test('sessions survive a server restart, require Secure under HTTPS, and fail after credentials rotate',async()=>{
+ const port='18881',origin='https://auth-fixture.invalid';
+ let peer;
+ async function start(file=auth) {
+  peer=spawn(process.execPath,['/app/server/dist/server/src/index.js'],{env:{...process.env,PORT:port,PUBLIC_ORIGIN:origin,AUTH_FILE:file},stdio:'ignore'});
+  for(let i=0;i<100;i++){try{if((await fetch('http://127.0.0.1:'+port+'/api/v1/auth/session')).ok)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw Error('Peer did not start');
+ }
+ async function stop(){if(peer.exitCode!==null||peer.signalCode!==null)return;const ended=new Promise(r=>peer.once('exit',r));peer.kill('SIGTERM');await ended;}
+ try {
+  await start();const login=await fetch('http://127.0.0.1:'+port+'/api/v1/auth/login',{method:'POST',headers:{Origin:origin,'Content-Type':'application/json','X-Forwarded-Proto':'https'},body:JSON.stringify({username:'audit',password})});assert.equal(login.status,200);
+  const setCookie=login.headers.getSetCookie()[0];assert.match(setCookie,/; Secure/);const cookie=setCookie.split(';')[0];
+  await stop();await start();
+  const session=await fetch('http://127.0.0.1:'+port+'/api/v1/auth/session',{headers:{Cookie:cookie}});assert.equal((await session.json()).data.authenticated,true);
+  await stop();const rotated=path.join(tmp,'rotated-auth.json');fs.writeFileSync(rotated,JSON.stringify({username:'audit',password:crypto.randomBytes(24).toString('hex')}));await start(rotated);
+  assert.equal((await fetch('http://127.0.0.1:'+port+'/api/v1/repos',{headers:{Cookie:cookie}})).status,401);
+ }finally{if(peer?.exitCode===null)await stop();}
 });
 test('unconfigured AI and foreign remote/config commands are blocked',async()=>{
  assert.equal((await request('/api/v1/ai/suggest',{repo})).status,400);
@@ -424,4 +495,15 @@ test('branch publication distinguishes no upstream, remote sync, divergence, mis
  git('update-ref','-d','refs/remotes/origin/main');assert.equal((await services.getStatus(dir)).upstreamStatus,'missing');
  git('branch','local-upstream',base);git('branch','--set-upstream-to=local-upstream');assert.equal((await services.getStatus(dir)).upstreamStatus,'local');
  git('checkout','--detach',head);assert.equal((await services.getStatus(dir)).detached,true);
+});
+
+test('repeated invalid form logins are bounded without blocking session checks or existing API credentials',async()=>{
+ for(let i=0;i<10;i++) {
+  const response=await fetch(base+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json',Origin:base},body:JSON.stringify({username:'audit',password:'incorrect'})});
+  assert.equal(response.status,401);
+ }
+ const blocked=await fetch(base+'/api/v1/auth/login',{method:'POST',headers:{'Content-Type':'application/json',Origin:base},body:JSON.stringify({username:'audit',password})});
+ assert.equal(blocked.status,429);assert.ok(Number(blocked.headers.get('retry-after'))>0);
+ assert.equal((await fetch(base+'/api/v1/auth/session')).status,200);
+ assert.equal((await request('/api/v1/health')).status,200);
 });

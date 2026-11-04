@@ -1,12 +1,19 @@
 import type { ApiResponse, DiffPayload, DiffWhitespaceMode, GraphCommit } from '@sikagit/shared';
+import { authGeneration, useAuthStore } from '../store/authStore';
 
 const BASE_URL = '/api/v1';
 
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
+  const generation = authGeneration();
   const res = await fetch(`${BASE_URL}${url}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
+
+  if (res.status === 401) {
+    if (generation === authGeneration()) useAuthStore.getState().requireLogin();
+    throw Object.assign(new Error('Sign in to continue'), { status: 401 });
+  }
 
   const json: ApiResponse<T> = await res.json();
 

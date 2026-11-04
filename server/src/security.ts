@@ -1,37 +1,16 @@
 import fs from 'fs';
 import path from 'path';
-import { createHash, createHmac, timingSafeEqual } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 
 const root = process.env.PROJECTS_ROOT || '/repos';
 const allowedOrigin = process.env.PUBLIC_ORIGIN || 'http://127.0.0.1:3001';
-const credentials = JSON.parse(fs.readFileSync(process.env.AUTH_FILE || '/run/secrets/auth.json', 'utf8'));
-if (typeof credentials.username !== 'string' || !credentials.username || typeof credentials.password !== 'string' || credentials.password.length < 16) throw new Error('Strong authentication credentials are required');
-const expected = createHash('sha256').update(`${credentials.username}:${credentials.password}`).digest();
-
-export function accessGuard(req: Request, res: Response, next: NextFunction): void {
+export function requestGuard(req: Request, res: Response, next: NextFunction): void {
   const origin = req.headers.origin;
   if (origin && origin !== allowedOrigin) {
     res.statusCode = 403; res.end('Origin rejected'); return;
   }
   if (req.headers['sec-fetch-site'] === 'cross-site' && !(req.method === 'GET' && req.headers['sec-fetch-mode'] === 'navigate')) {
     res.statusCode = 403; res.end('Cross-site access rejected'); return;
-  }
-  const authorization = req.headers.authorization || '';
-  const value = authorization.startsWith('Basic ') ? Buffer.from(authorization.slice(6), 'base64').toString() : '';
-  const actual = createHash('sha256').update(value).digest();
-  const cookie = (req.headers.cookie || '').split(';').map(x => x.trim()).find(x => x.startsWith('sikagit_session='))?.slice('sikagit_session='.length) || '';
-  const [expires, signature] = cookie.split('.');
-  const sign = (v: string) => createHmac('sha256', expected).update(v).digest('hex');
-  const signed = signature && /^[0-9a-f]{64}$/.test(signature) && /^\d{13}$/.test(expires || '') && Number(expires) > Date.now() && timingSafeEqual(Buffer.from(signature, 'hex'), Buffer.from(sign(expires), 'hex'));
-  const basic = authorization.startsWith('Basic ') && timingSafeEqual(actual, expected);
-  if (!basic && !signed) {
-    res.setHeader('WWW-Authenticate', 'Basic realm="SikaGit", charset="UTF-8"');
-    res.statusCode = 401; res.end('Authentication required'); return;
-  }
-  if (basic && !signed) {
-    const expiry = String(Date.now() + 8 * 60 * 60 * 1000);
-    res.setHeader('Set-Cookie', `sikagit_session=${expiry}.${sign(expiry)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=28800${allowedOrigin.startsWith('https:') ? '; Secure' : ''}`);
   }
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');

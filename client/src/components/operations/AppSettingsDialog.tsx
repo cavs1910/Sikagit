@@ -1,3 +1,5 @@
+import { useAuthStore } from '../../store/authStore';
+import { useToastStore } from '../../store/toastStore';
 import { AISettingsPanel } from './AISettingsPanel';
 import { useState } from 'react';
 import { X, Settings, Minus, Plus, Type, Code2, Palette, RotateCcw, Sparkles } from 'lucide-react';
@@ -74,6 +76,13 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     demoMode, setDemoMode,
   } = useUIStore();
 
+  const [signingOut, setSigningOut] = useState(false);
+  const signOut = async () => {
+    setSigningOut(true);
+    try { await useAuthStore.getState().logout(); onClose(); }
+    catch (err) { useToastStore.getState().addToast('error', (err as Error).message); }
+    finally { setSigningOut(false); }
+  };
   const [activeTab, setActiveTab] = useState<Tab>('general');
 
   // Draft state
@@ -165,6 +174,13 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
           <div className="flex-1 overflow-y-auto p-4">
             {activeTab === 'general' && (
               <div className="space-y-5">
+                <div className="flex items-center justify-between gap-4 border-b border-border pb-4">
+                  <div>
+                    <h3 className="text-xs font-medium text-text-primary mb-0.5">Session</h3>
+                    <p className="text-[0.6rem] text-text-muted">Stay signed in for 365 days. Sign out only on this device.</p>
+                  </div>
+                  <button type="button" disabled={signingOut} onClick={() => void signOut()} className="shrink-0 rounded border border-border px-3 py-2 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50">{signingOut ? 'Signing out…' : 'Sign out'}</button>
+                </div>
                 {/* Group files by folder */}
                 <div>
                   <div className="flex items-center justify-between">

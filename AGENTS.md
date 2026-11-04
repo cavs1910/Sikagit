@@ -28,6 +28,8 @@ Este archivo permite trabajar sin el chat original. Leelo antes de cambiar el pr
 
 - Publicación: indicador de rama junto a Push y nubes por commit, basados en referencias remotas locales (último Fetch), sin consultas de red por fila. Ver `docs/REMOTE_STATUS.md`.
 
+- Login: formulario propio con `express-session` y sesiones revocables de 365 días en la SQLite existente; `AUTH_FILE` conserva el usuario/contraseña. Shell y assets públicos en el servicio privado, APIs y Socket.IO autenticados. Ver `docs/AUTHENTICATION.md`.
+
 - Mobile: debajo de 768 px usa menú de repositorios y vistas separadas de historial/cambios/detalle. El editor pliega el explorador y los diálogos se adaptan al viewport. Ver `docs/MOBILE_LAYOUT.md`.
 
 ## Límites de seguridad que deben conservarse
@@ -54,7 +56,7 @@ Leé `docs/SECURITY_REVIEW.md` antes de cambiar Git, autenticación, rutas o Doc
    sg docker -c 'sh scripts/test-security.sh'
    ```
 
-   La última ejecución de referencia pasó **43 pruebas**. Backend TypeScript y Vite compilan. El chequeo estricto del frontend conserva **35 diagnósticos preexistentes**: no declarar que pasa ni confundirlos con regresiones. Comparar contra la base si cambian.
+   La última ejecución de referencia pasó **50 pruebas**. Backend TypeScript y Vite compilan. El chequeo estricto del frontend conserva **35 diagnósticos preexistentes**: no declarar que pasa ni confundirlos con regresiones. Comparar contra la base si cambian.
 5. Para UI, probar el recorrido en navegador; para escrituras o AI usar fixtures desechables, no datos reales ni llamadas pagas. Para cambios de dependencias/seguridad, revisar npm audit y los escaneos apropiados. Los reportes privados están fuera del source.
 6. Para un despliegue de cambios de aplicación solicitado: respaldar SQLite mediante su API de backup (no copiar sólo el `.db` activo), conservar la imagen previa y reconstruir desde el Compose privado:
 

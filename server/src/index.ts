@@ -1,6 +1,7 @@
 import editorRoutes from './routes/editor';
 import aiRoutes from './routes/ai';
-import { accessGuard } from './security';
+import { requestGuard } from './security';
+import { accessGuard, authRouter, hasBasic, sessionMiddleware, sessionEvents, sessionStore } from './auth';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -16,7 +17,7 @@ const PORT = process.env.PORT || 3001;
 
 const app = express();
 const httpServer = createServer(app);
-app.use(accessGuard);
+app.use(requestGuard);
 const ALLOWED_ORIGINS = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
   .split(',')
   .map(s => s.trim());
@@ -31,7 +32,6 @@ const io = new SocketServer(httpServer, {
 app.use(cors({
   origin: ALLOWED_ORIGINS,
 }));
-app.use(express.json({ limit: '5mb' }));
 
 // API replies describe live git state - never let the browser (or a proxy)
 // reuse an earlier reply for the same URL. Express still adds an ETag, so a
@@ -41,6 +41,13 @@ app.use('/api', (_req, res, next) => {
   next();
 });
 
+app.use('/api', sessionMiddleware);
+app.use('/api/v1/auth', authRouter);
+app.use('/api', accessGuard);
+app.use(express.json({ limit: '5mb' }));
+
+io.engine.use(requestGuard as any);
+io.engine.use(sessionMiddleware as any);
 io.engine.use(accessGuard as any);
 
 // Routes
@@ -68,9 +75,24 @@ if (process.env.NODE_ENV === 'production') {
 // Error handler
 app.use(errorHandler);
 
+// Revoke existing connections as well as subsequent HTTP/handshake requests.
+sessionEvents.on('revoked', (id: string) => {
+  for (const socket of io.sockets.sockets.values()) {
+    if ((socket.request as express.Request).sessionID === id) socket.disconnect(true);
+  }
+});
+
 // Socket.io
 io.on('connection', (socket) => {
   console.log(`[Socket] Client connected: ${socket.id}`);
+  const request = socket.request as express.Request;
+  socket.use((_packet, next) => {
+    if (hasBasic(request)) { next(); return; }
+    sessionStore.get(request.sessionID, (err, value) => {
+      if (err || !value?.authenticated || Number(value.expiresAt) <= Date.now()) { socket.disconnect(true); return; }
+      next();
+    });
+  });
 
   socket.on('watch:repo', (repoPath: string) => {
     console.log(`[Socket] Watching repo: ${repoPath}`);

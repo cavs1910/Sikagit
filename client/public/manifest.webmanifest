@@ -1,0 +1,11 @@
+{
+  "name": "SikaGit",
+  "short_name": "SikaGit",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#1e2036",
+  "theme_color": "#1e2036",
+  "icons": [{ "src": "/logo-128.png", "sizes": "128x128", "type": "image/png" }]
+}

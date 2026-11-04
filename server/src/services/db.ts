@@ -9,7 +9,7 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-const db = new Database(path.join(DATA_DIR, 'sikagit.db'));
+export const db: Database.Database = new Database(path.join(DATA_DIR, 'sikagit.db'));
 
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');

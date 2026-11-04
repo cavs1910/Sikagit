@@ -35,12 +35,18 @@ The operator keeps the raw JSON/TAP reports outside the source tree; they may co
 
 ## Remaining trust boundaries and limits
 
+The later persistent-login integration replaces the historical eight-hour cookie
+and browser Basic challenge with an in-app login and revocable 365-day sessions.
+See [Authentication](AUTHENTICATION.md) for the current storage, public shell,
+API/Socket protection, Origin checks, cooldown, migration and regression tests.
+The original scan counts above remain historical evidence.
+
 - Anyone authorized to use this single-user service can change every mounted repository using its Git operations. This is not per-repository authorization or a safe service for arbitrary strangers.
 - The application process must read a GitHub token. The restricted helper prevents accidental delivery to another host, but cannot hide that token from arbitrary code execution inside the same process/container. The existing token retains its original permissions; a separately provisioned fine-grained token would further reduce impact.
 - The container is not an egress firewall. Browser CSP limits browser requests; it does not restrict arbitrary server-side code if a future exploit executes it.
 - Real-path validation is not race-free against a hostile process changing the host filesystem concurrently. Hard links, worktree administrative paths and Git's own filesystem behavior are not a complete capability sandbox. Operate trusted local working trees; do not run malware or mutually hostile users alongside the service.
 - The app's mutex cannot coordinate every external CLI/editor. In particular, old lock-file cleanup and shelving are not fully transactional against simultaneous external Git/filesystem changes. Recovery refs/reflogs and backups remain important; normal discard/reset/uncommit actions retain their destructive Git meaning when explicitly requested.
-- Basic authentication has no separate MFA or account/rate-limit system. Private-network access controls, a long random password and secure HTTPS are required. Signing and hooks are deliberately disabled, so pre-commit/pre-push validation and signing do not run through this client.
+- Authentication has no separate MFA or multi-user account system. The login form now has a bounded cooldown; explicit CLI Basic access retains its previous behavior. Private-network access controls, a long random password and secure HTTPS are required. Signing and hooks are deliberately disabled, so pre-commit/pre-push validation and signing do not run through this client.
 - Strict branch/file/config policies can reject otherwise valid advanced Git workflows. LFS/custom filters, custom credentials, external merge/diff tools and arbitrary hosts are not supported in this deployment.
 - The upstream frontend has pre-existing TypeScript errors. The backend typechecks, and Vite builds the frontend; browser smoke tests are separate from a complete frontend typecheck. Do not infer a fully green upstream test suite.
 - Scanners use patterns/advisory databases, not a line-by-line audit of every transitive dependency, native library or Git implementation. Unknown vulnerabilities and supply-chain compromise remain possible. Updates must be rebuilt, rescanned and tested rather than pulled automatically.

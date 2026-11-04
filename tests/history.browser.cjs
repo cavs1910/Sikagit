@@ -27,6 +27,7 @@ const origin = process.env.SIKAGIT_TEST_ORIGIN || 'http://127.0.0.1:5184';
     if (endpoint === '/git/branches') data = [{ name: 'main', current: true, isRemote: false, commit: normal[0].hash }];
     if (endpoint === '/git/status') data = { current: 'main', tracking: null, upstreamStatus: 'none', hasRemote: false, ahead: 0, behind: 0, files: [], staged: [], unstaged: [], untracked: [], conflicted: [] };
     if (endpoint === '/ai/settings') data = { enabled: false, hasApiKey: false };
+    if (endpoint === '/auth/session') data = { authenticated: true, expiresAt: Date.now() + 86400000 };
     if (endpoint.includes('diff')) data = { diff: '', suppressed: [] };
     if (endpoint === '/git/graph') {
      const mode = url.searchParams.get('showReflog') === 'true';
