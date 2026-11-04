@@ -37,7 +37,7 @@ export function MainContent() {
   const repo = repos.find(r => r.id === activeRepoId);
   const { fetchLog, selectedCommit, selectCommit } = useLogStore();
   const { fetchAll, selectedFile, selectFile, status } = useStatusStore();
-  const { commitListWidth, setCommitListWidth, bottomPanelHeight, setBottomPanelHeight, demoMode } = useUIStore();
+  const { commitListWidth, setCommitListWidth, bottomPanelHeight, setBottomPanelHeight, demoMode, showReflog, setShowReflog } = useUIStore();
   const projects = useProjectStore(s => s.projects);
   const confirm = useConfirmStore(s => s.confirm);
   const repoProject = activeRepoId ? projects.find(p => p.repoIds.includes(activeRepoId)) : undefined;
@@ -423,6 +423,22 @@ export function MainContent() {
         >
           {/* Commit list */}
           <div className={cn("flex-1 flex flex-col overflow-hidden min-h-0", mobile && mobileTab !== 'history' && "hidden")}>
+            <div className="min-h-8 flex shrink-0 items-center justify-between gap-2 px-3 border-b border-border bg-bg-secondary text-xs text-text-secondary">
+              <span>History</span>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={showReflog}
+                onClick={() => setShowReflog(!showReflog)}
+                title="Include commits recoverable from the reflog"
+                className="flex items-center gap-2 rounded py-1 hover:text-text-primary focus-visible:outline-2 focus-visible:outline-accent"
+              >
+                Show reflog
+                <span aria-hidden="true" className={cn('relative h-[18px] w-8 rounded-full border transition-colors', showReflog ? 'bg-accent border-accent' : 'bg-bg-tertiary border-border')}>
+                  <span className={cn('absolute top-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-[left]', showReflog ? 'left-[17px]' : 'left-[2px]')} />
+                </span>
+              </button>
+            </div>
             <CommitList
               repoPath={repo.path}
               onBranchAction={async (branch, action) => {

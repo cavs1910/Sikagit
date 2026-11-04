@@ -19,6 +19,18 @@ also show the label:
 - **Only local**: not found in the known remote-tracking history.
 - **Publication unknown**: the check failed or exceeded its bounded traversal.
 
+The history toolbar's **Show reflog** switch is off by default. The normal view
+uses `git log --all`, showing history reachable from current refs (including
+local branches, remote-tracking branches and tags). Enable the switch to also
+include commits recoverable from reflogs, such as commits replaced by squash or
+rebase. Those commits can correctly show **Only local**. The preference is saved
+in the existing browser UI settings (`sikagit-ui`) across reloads. Changing it
+clears the cached history, selection and pagination, discards pending history
+responses, and reloads the graph from the first page. Subsequent refreshes and
+pages keep the chosen mode. Both `/git/log` and `/git/graph` accept
+`showReflog=true`; an omitted parameter defaults to false. This only changes the
+view: it never deletes or expires reflogs, commits or branches.
+
 These are local observations, not live remote confirmations. Fetch updates the
 remote-tracking refs; successful in-app fetch/pull/push operations also reload
 the history and status. An external change needs a history refresh. A remote may
@@ -39,3 +51,11 @@ outside a page, local tags, multiple remotes, reflog-only commits, missing objec
 invalid arguments, batch limits, upstream removal, divergence, local upstreams and
 detached HEAD. Browser fixtures exercise branch states, row/detail labels and
 last-Fetch tooltips on desktop and mobile without real Git writes.
+
+Run the Git/API fixtures with `sh scripts/test-security.sh`. For the history UI
+fixture, start Vite with `npm run dev -w client -- --host 127.0.0.1 --port 5184`
+and run `node tests/history.browser.cjs` with Playwright and Chromium available.
+`SIKAGIT_BROWSER_CLIENT` can point to an existing Playwright module or browser
+client, and `SIKAGIT_TEST_ORIGIN` overrides the Vite URL. This fixture mocks all
+API responses and checks the switch on mobile/desktop, saved preferences,
+pagination reset, selection clearing and rejection of a stale page response.

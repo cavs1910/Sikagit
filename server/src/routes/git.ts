@@ -171,7 +171,8 @@ router.get('/log', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 200));
   const skip = Math.max(0, parseInt(req.query.skip as string) || 0);
-  const commits = await withRepoLock(repoPath, () => gitService.getLogWithParents(repoPath, limit, skip));
+  const showReflog = req.query.showReflog === 'true';
+  const commits = await withRepoLock(repoPath, () => gitService.getLogWithParents(repoPath, limit, skip, showReflog));
   res.json({ success: true, data: commits });
 }));
 
@@ -179,7 +180,8 @@ router.get('/graph', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   const limit = Math.min(500, Math.max(1, parseInt(req.query.limit as string) || 200));
   const skip = Math.max(0, parseInt(req.query.skip as string) || 0);
-  const commits = await withRepoLock(repoPath, () => gitService.getLogWithParents(repoPath, limit, skip));
+  const showReflog = req.query.showReflog === 'true';
+  const commits = await withRepoLock(repoPath, () => gitService.getLogWithParents(repoPath, limit, skip, showReflog));
   const graph = computeGraph(commits);
   res.json({ success: true, data: graph });
 }));

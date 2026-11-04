@@ -97,11 +97,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ id, path }),
     }),
-  getLog: (repo: string, limit = 200, skip = 0) =>
-    request<import('@sikagit/shared').GitCommit[]>(`/git/log?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}`),
-  getGraph: (repo: string, limit = 200, skip = 0) =>
+  getLog: (repo: string, limit = 200, skip = 0, showReflog = false) =>
+    request<import('@sikagit/shared').GitCommit[]>(`/git/log?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}&showReflog=${showReflog}`),
+  getGraph: (repo: string, limit = 200, skip = 0, showReflog = false) =>
     request<{ commits: GraphCommit[]; totalLanes: number }>(
-      `/git/graph?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}`
+      `/git/graph?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}&showReflog=${showReflog}`
     ),
   getBranches: (repo: string) => request<import('@sikagit/shared').GitBranch[]>(`/git/branches?repo=${encodeURIComponent(repo)}`),
   mergeBranch: (repo: string, sourceBranch: string) =>

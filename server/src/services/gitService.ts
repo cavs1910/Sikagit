@@ -448,7 +448,8 @@ export async function getCommitPublication(repoPath: string, hashes: string[]): 
 export async function getLogWithParents(
   repoPath: string,
   limit = 200,
-  skip = 0
+  skip = 0,
+  showReflog = false
 ): Promise<GitCommit[]> {
   const git = getGit(repoPath);
 
@@ -460,7 +461,7 @@ export async function getLogWithParents(
     result = await git.raw([
       'log',
       '--all',
-      '--reflog',
+      ...(showReflog ? ['--reflog'] : []),
       '--date-order',
       `--max-count=${limit}`,
       `--skip=${skip}`,

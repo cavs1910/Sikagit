@@ -25,6 +25,7 @@ interface UIState {
   unstagedPanelRatio: number; // 0-1, proportion of unstaged panel width
   groupFilesByFolder: boolean;
   autoFetchOnOpen: boolean;
+  showReflog: boolean;
   demoMode: boolean;
   aiEnabled: boolean;
   aiConfigured: boolean;
@@ -48,6 +49,7 @@ interface UIState {
   setUnstagedPanelRatio: (ratio: number) => void;
   setGroupFilesByFolder: (v: boolean) => void;
   setAutoFetchOnOpen: (v: boolean) => void;
+  setShowReflog: (v: boolean) => void;
   setDemoMode: (v: boolean) => void;
   setAiEnabled: (v: boolean) => void;
   setBackgroundSmartCommit: (v: boolean) => void;
@@ -88,6 +90,7 @@ export const useUIStore = create<UIState>()(
       unstagedPanelRatio: 0.5,
       groupFilesByFolder: true,
       autoFetchOnOpen: true,
+      showReflog: false,
       demoMode: false,
       aiEnabled: false,
       aiConfigured: false,
@@ -130,6 +133,7 @@ export const useUIStore = create<UIState>()(
       }),
       setGroupFilesByFolder: (v: boolean) => set({ groupFilesByFolder: v }),
       setAutoFetchOnOpen: (v: boolean) => set({ autoFetchOnOpen: v }),
+      setShowReflog: (v: boolean) => set({ showReflog: v }),
       setDemoMode: (v: boolean) => set({ demoMode: v }),
       setAiEnabled: (v: boolean) => set({ aiEnabled: v }),
       setBackgroundSmartCommit: (v: boolean) => set({ backgroundSmartCommit: v }),

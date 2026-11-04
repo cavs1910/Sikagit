@@ -360,8 +360,50 @@ test('publication uses remote ancestry across pages and any remote, not tags or 
  const page=await services.getLogWithParents(dir,1,2);assert.equal(page.length,1);assert.equal(page[0].hash,base);assert.equal(page[0].publication,'published');
  git('update-ref','refs/remotes/backup/topic',local);states=await services.getCommitPublication(dir,[local]);assert.equal(states.get(local),'published');assert.equal((await services.getStatus(dir)).tracking,null);
  git('update-ref','-d','refs/remotes/backup/topic');git('reset','--soft',published);
- const history=await services.getLogWithParents(dir,100);assert.equal(history.find(c=>c.hash===local).publication,'local');
+ const history=await services.getLogWithParents(dir,100,0,true);assert.equal(history.find(c=>c.hash===local).publication,'local');
  git('reset','--soft',beforeHead);assert.equal(git('write-tree'),beforeIndex);assert.equal(git('status','--porcelain'),'');
+});
+test('history hides reflog-only commits by default and includes them only when requested, without changing Git state',async()=>{
+ const {dir,git,commit}=publicationFixture('history-reflog');
+ const base=commit('base');
+ git('checkout','-qb','topic');const topic=commit('normal branch');git('checkout','main');
+ const recovered=commit('before rewrite');git('reset','--hard',base);const head=commit('after rewrite');
+ git('update-ref','refs/remotes/origin/main',base);git('tag','release',head);
+ assert.equal(git('rev-list','--all').split('\n').includes(recovered),false);
+ assert.ok(git('reflog','--format=%H').split('\n').includes(recovered));
+ const snapshot=()=>[git('show-ref'),git('reflog','show','--all','--format=%H %gs'),git('rev-parse','HEAD'),git('write-tree'),git('status','--porcelain')];
+ const before=snapshot();
+ for(const mode of [undefined,false,true,false]) {
+  const history=await services.getLogWithParents(dir,100,0,mode);
+  assert.equal(history.some(c=>c.hash===recovered),mode===true);
+  for(const hash of [base,topic,head])assert.ok(history.some(c=>c.hash===hash));
+  assert.equal(history.find(c=>c.hash===base).publication,'published');
+  assert.equal(history.find(c=>c.hash===topic).publication,'local');
+  assert.ok(history.find(c=>c.hash===topic).branches.includes('topic'));
+  assert.equal(history.find(c=>c.hash===head).isHead,true);
+  assert.ok(history.find(c=>c.hash===head).tags.includes('release'));
+  assert.deepEqual(history.find(c=>c.hash===head).parentHashes,[base]);
+  if(mode)assert.equal(history.find(c=>c.hash===recovered).publication,'local');
+ }
+ for(const endpoint of ['log','graph']) {
+  for(const mode of [undefined,'false','true','1']) {
+   const url='/api/v1/git/'+endpoint+'?repo='+encodeURIComponent(dir)+'&limit=100'+(mode===undefined?'':'&showReflog='+mode);
+   const response=await request(url);assert.equal(response.status,200);
+   const {data}=await response.json();const commits=endpoint==='graph'?data.commits:data;
+   assert.equal(commits.some(c=>c.hash===recovered),mode==='true');
+   for(const hash of [base,topic,head])assert.ok(commits.some(c=>c.hash===hash));
+   if(endpoint==='graph')assert.ok(commits.every(c=>Number.isInteger(c.lane)&&c.lane>=0&&c.lane<data.totalLanes));
+   const paged=[];
+   for(let skip=0;skip<commits.length;skip+=2) {
+    const pageUrl=url.replace('limit=100','limit=2')+'&skip='+skip;
+    const {data:pageData}=await (await request(pageUrl)).json();
+    paged.push(...(endpoint==='graph'?pageData.commits:pageData).map(c=>c.hash));
+   }
+   assert.deepEqual(paged,commits.map(c=>c.hash));
+  }
+ }
+ assert.deepEqual(snapshot(),before);
+ assert.equal(git('cat-file','-t',recovered),'commit');
 });
 test('publication is local without remote refs and unknown on unavailable objects or invalid revisions',async()=>{
  const {dir,git,commit}=publicationFixture('publication-errors');const head=commit('only local');
