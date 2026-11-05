@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { GitBranch, GitMerge, Check, ChevronDown, Search, Cloud, Loader2 } from 'lucide-react';
+import { GitBranch, GitMerge, Check, ChevronDown, Search, Cloud, Loader2, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useToastStore } from '../../store/toastStore';
+import { useConfirmStore } from '../../store/confirmStore';
 import { cn } from '../../lib/utils';
 import type { GitBranch as GitBranchType } from '@sikagit/shared';
 
@@ -25,10 +26,13 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
   const fetchAll = useStatusStore(s => s.fetchAll);
   const fetchLog = useLogStore(s => s.fetchLog);
   const addToast = useToastStore(s => s.addToast);
+  const confirm = useConfirmStore(s => s.confirmWithCheckbox);
 
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const [switching, setSwitching] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const busy = !!switching || !!deleting;
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -61,7 +65,7 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
   }, [open]);
 
   const switchTo = async (b: GitBranchType) => {
-    if (b.current || switching) return;
+    if (b.current || busy) return;
     setSwitching(b.name);
     try {
       const { branch } = await api.switchBranch(repoPath, b.name);
@@ -77,11 +81,44 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
     }
   };
 
+  const removeBranch = async (b: GitBranchType) => {
+    if (busy || b.current) return;
+    setDeleting(b.name);
+    setOpen(false);
+    try {
+      const label = b.isRemote ? remoteLabel(b.name) : b.name;
+      const result = await confirm({
+        title: b.isRemote ? 'Delete remote branch?' : 'Delete local branch?',
+        message: b.isRemote
+          ? `Delete "${label}" from the remote server? This affects other clones. Local branches will be kept.\n\nIf it changed since the last Fetch, deletion will be refused. Fetch and review it before retrying.`
+          : `Delete local branch "${label}"? Remote branches will be kept. Git will refuse if the branch is not fully merged unless you explicitly force deletion.`,
+        confirmLabel: b.isRemote ? 'Delete remote branch' : 'Delete local branch',
+        variant: 'danger',
+        checkbox: b.isRemote ? undefined : { label: 'Force delete, even with unmerged commits', defaultChecked: false },
+      });
+      if (!result.confirmed) return;
+      if (b.isRemote) {
+        const outcome = await api.deleteRemoteBranch(repoPath, b.name, b.commit);
+        addToast('success', outcome.message);
+      } else {
+        await api.deleteBranch(repoPath, b.name, !!result.checkboxValue, b.commit);
+        addToast('success', `Deleted local branch ${b.name}`);
+      }
+    } catch (err) {
+      addToast('error', err instanceof Error ? err.message : 'Failed to delete branch');
+    } finally {
+      // Refresh after errors as well: a remote may have changed independently.
+      void fetchAll(repoPath);
+      void fetchLog(repoPath);
+      setDeleting(null);
+    }
+  };
+
   return (
     <div ref={ref} className="relative flex-shrink-0">
       <button
         onClick={() => setOpen(o => !o)}
-        disabled={!ready}
+        disabled={!ready || busy}
         title={`Current branch: ${current} — click to switch`}
         aria-expanded={open}
         className={cn(
@@ -92,7 +129,7 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
             : 'border-border text-text-secondary hover:text-text-primary hover:border-accent/40'
         )}
       >
-        {!ready && loading ? <Loader2 size={12} className="animate-spin flex-shrink-0" /> : <GitBranch size={12} className="text-accent flex-shrink-0" />}
+        {(!ready && loading) || busy ? <Loader2 size={12} className="animate-spin flex-shrink-0" /> : <GitBranch size={12} className="text-accent flex-shrink-0" />}
         <span className="truncate font-medium">{current}</span>
         <ChevronDown size={12} className="text-text-muted flex-shrink-0" />
       </button>
@@ -122,7 +159,9 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
                   label={b.name}
                   active={b.current}
                   busy={switching === b.name}
+                  disabled={busy}
                   onClick={() => switchTo(b)}
+                  onDelete={() => void removeBranch(b)}
                 />
               ))
             )}
@@ -136,7 +175,9 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
                     label={remoteLabel(b.name)}
                     remote
                     busy={switching === b.name}
+                    disabled={busy}
                     onClick={() => switchTo(b)}
+                    onDelete={b.name.endsWith('/HEAD') ? undefined : () => void removeBranch(b)}
                   />
                 ))}
               </>
@@ -145,7 +186,7 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
           <div className="shrink-0 border-t border-border p-2 bg-bg-secondary">
             <button
               type="button"
-              disabled={!!switching}
+              disabled={busy}
               onClick={() => { setOpen(false); setFilter(''); onMerge('from'); }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-accent hover:bg-accent/10 disabled:opacity-40"
             >
@@ -154,7 +195,7 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
             </button>
             <button
               type="button"
-              disabled={!!switching || !branches.some(b => b.current && !b.isRemote) || !branches.some(b => !b.current && !b.isRemote)}
+              disabled={busy || !branches.some(b => b.current && !b.isRemote) || !branches.some(b => !b.current && !b.isRemote)}
               onClick={() => { setOpen(false); setFilter(''); onMerge('to'); }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-accent hover:bg-accent/10 disabled:opacity-40"
             >
@@ -168,19 +209,22 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
   );
 }
 
-function BranchRow({ label, active, remote, busy, onClick }: {
+function BranchRow({ label, active, remote, busy, disabled, onClick, onDelete }: {
   label: string;
   active?: boolean;
   remote?: boolean;
   busy?: boolean;
+  disabled?: boolean;
   onClick: () => void;
+  onDelete?: () => void;
 }) {
   return (
+    <div className="flex items-center">
     <button
       onClick={onClick}
-      disabled={active || busy}
+      disabled={active || busy || disabled}
       className={cn(
-        'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors',
+        'min-w-0 flex-1 flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors',
         active
           ? 'text-accent cursor-default'
           : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
@@ -197,5 +241,14 @@ function BranchRow({ label, active, remote, busy, onClick }: {
       )}
       <span className="truncate flex-1">{label}</span>
     </button>
+    {onDelete && <button
+      type="button"
+      aria-label={`Delete ${remote ? 'remote' : 'local'} branch ${label}`}
+      title={active ? 'Switch to another branch before deleting' : `Delete ${remote ? 'remote' : 'local'} branch ${label}`}
+      disabled={active || disabled}
+      onClick={onDelete}
+      className="shrink-0 p-2 mr-1 rounded text-text-muted hover:text-danger hover:bg-danger/10 disabled:opacity-30 disabled:cursor-not-allowed"
+    ><Trash2 size={13} /></button>}
+    </div>
   );
 }

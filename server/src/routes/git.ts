@@ -15,7 +15,7 @@ router.use((req, res, next) => {
       res.status(400).json({ success: false, error: `${key} must be a boolean` }); return;
     }
   }
-  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'targetBranch', 'key', 'value', 'url', 'branchName', 'patch']) {
+  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'targetBranch', 'expectedCommit', 'key', 'value', 'url', 'branchName', 'patch']) {
     if (req.body?.[key] !== undefined && typeof req.body[key] !== 'string') {
       res.status(400).json({ success: false, error: `${key} must be a string` }); return;
     }
@@ -351,13 +351,24 @@ router.post('/merge/abort', asyncHandler(async (req: Request, res: Response) => 
 
 router.post('/branch/delete', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const { branch, force } = req.body;
+  const { branch, force, expectedCommit } = req.body;
   if (!branch) {
     res.status(400).json({ success: false, error: 'Missing required field: branch' });
     return;
   }
-  await withRepoLock(repoPath, () => gitService.deleteBranch(repoPath, branch, force));
+  await withRepoLock(repoPath, () => gitService.deleteBranch(repoPath, branch, force, expectedCommit));
   res.json({ success: true });
+}));
+
+router.post('/branch/delete-remote', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { branch, expectedCommit } = req.body;
+  if (!branch || !expectedCommit || req.body.force !== undefined) {
+    res.status(400).json({ success: false, error: 'branch and expectedCommit required; remote deletion cannot be forced' });
+    return;
+  }
+  const result = await withRepoLock(repoPath, () => gitService.deleteRemoteBranch(repoPath, branch, expectedCommit));
+  res.json({ success: true, data: result });
 }));
 
 router.post('/discard', asyncHandler(async (req: Request, res: Response) => {

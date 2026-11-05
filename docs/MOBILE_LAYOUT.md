@@ -22,6 +22,21 @@ source is kept unless **Delete source branch after merge** is explicitly checked
 and the merge succeeds. Neither action pushes. Detached HEAD and repositories
 without another local branch disable **Merge To…**.
 
+Each branch row also has a trash button with an explicit local/remote label and
+a confirmation dialog. Deleting a local branch keeps its remote counterpart;
+Git refuses unmerged branches unless **Force delete, even with unmerged commits**
+is explicitly checked. The active branch and branches checked out in another
+worktree cannot be deleted, even with force. A stale selection is rejected.
+
+Deleting a remote branch removes it from the server while preserving local
+branches. The last-fetched commit is required, and a Git lease prevents deletion
+if the server branch has changed since Fetch. Fetch and review before retrying
+a stale-branch error; remote deletion has no force override. The local tracking
+reference is removed only if it still points to the confirmed commit. Remote
+HEAD aliases have no trash button. Deletion supports a single HTTPS GitHub push
+URL per remote, validated before sending only the selected branch deletion;
+custom mirror/refspec configuration, tags and submodules are not pushed.
+
 The Git workspace provides History and Changes views. Selecting a commit or file
 opens its detail at the full available width; Back returns to the previous view.
 The mobile history hides the Type, Author, Date and Hash columns; commit details
@@ -70,3 +85,11 @@ confirmation and busy controls, optional source deletion, conflicts/abort,
 errors, mobile overflow and the desktop Explorer divider at those widths.
 The production-image suite additionally exercises Merge To against disposable
 Git repositories, including dirty/stale requests and non-conflict failures.
+
+`node tests/branch-delete.browser.cjs` uses the same browser settings and mocked
+APIs to cover both deletion types, cancellation, explicit local force, active
+branch/HEAD protections, stale remote errors, busy state, refresh and long-name
+overflow at 320/390/1280px. Backend tests use disposable repositories and a
+test-only Git transport adapter for one fixed fake GitHub URL to a local bare
+repository. This exercises actual leased deletion without networking; the adapter
+is never loaded or copied into production, and real repositories are not mounted.

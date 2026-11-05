@@ -19,7 +19,8 @@ const sec = require('/app/server/dist/server/src/security.js');
 const services = require('/app/server/dist/server/src/services/gitService.js');
 const headers = {Authorization:'Basic '+Buffer.from('audit:'+password).toString('base64'),'Content-Type':'application/json'};
 const fixtureFile=path.join(tmp,'ai-fixture.json'); process.env.AI_TEST_FIXTURE=fixtureFile; process.env.AI_TEST_CATALOG_LOG=path.join(tmp,'catalog-requests.jsonl'); process.env.AI_TEST_GATEWAY_LOG=path.join(tmp,'gateway-requests.jsonl');
-const child = spawn(process.execPath,['--require','/tests/ai-provider-mock.cjs','/app/server/dist/server/src/index.js'],{env:process.env,stdio:['ignore','ignore','pipe']});
+process.env.SIKAGIT_TEST_REMOTE_FIXTURE=path.join(tmp,'git-remote-fixture.json');
+const child = spawn(process.execPath,['--require','/tests/git-network-mock.cjs','--require','/tests/ai-provider-mock.cjs','/app/server/dist/server/src/index.js'],{env:process.env,stdio:['ignore','ignore','pipe']});
 let logs='';child.stderr.on('data',d=>{logs+=d;});
 const ready = (async()=>{for(let i=0;i<100;i++){try{const r=await fetch(base+'/api/v1/health',{headers});if(r.ok)return;}catch{}await new Promise(r=>setTimeout(r,50));}throw new Error('Server did not start: '+logs.slice(-1000));})();
 async function request(route,body,extra={}){await ready;return fetch(base+route,{method:body===undefined?'GET':'POST',headers:{...headers,...extra},body:body===undefined?undefined:JSON.stringify(body)});}
@@ -598,4 +599,49 @@ test('AI error cause chains and schema issue diagnostics expose only fixed metad
  const unknown=diagnoseAIError(Error('private-error-payload-marker'),context);assert.equal(unknown.details.code,'unknown');
  const {z}=require('/app/node_modules/zod');const parsed=z.object({title:z.string().max(72)}).safeParse({title:'private-error-payload-marker'.repeat(10)});assert.equal(parsed.success,false);const schema=diagnoseAIError(parsed.error,context);assert.equal(schema.details.code,'invalid_response');assert.match(schema.message,/title/);
  for(const e of [nested,network,unknown,schema])assert.equal(JSON.stringify(e).includes('private-'),false);
+});
+
+test('local branch deletion protects the active branch, stale selections, unmerged commits and other worktrees',async()=>{
+ const {folder,run}=mergeToFixture('delete-local');const main=run('rev-parse','main'),feature=run('rev-parse','feature');run('checkout','main');
+ run('branch','merged/topic','main');run('update-ref','refs/remotes/origin/merged/topic',main);
+ const remove=(branch,extra={})=>request('/api/v1/git/branch/delete',{repo:folder,branch,expectedCommit:branch==='main'?main:feature,...extra});
+ assert.equal((await remove('main',{force:true})).ok,false);assert.equal(run('branch','--show-current'),'main');
+ assert.equal((await remove('feature',{force:false})).ok,false);assert.equal(run('rev-parse','feature'),feature);
+ assert.equal((await remove('feature',{expectedCommit:main,force:true})).ok,false);assert.equal(run('rev-parse','feature'),feature);
+ for(const extra of [{expectedCommit:[]},{force:'false'},{expectedCommit:'HEAD~1'}])assert.equal((await remove('feature',extra)).ok,false);
+ assert.equal((await remove('merged/topic',{expectedCommit:main})).status,200);assert.equal(run('rev-parse','refs/remotes/origin/merged/topic'),main);
+ assert.equal((await remove('feature',{force:true})).status,200);assert.throws(()=>run('show-ref','--verify','refs/heads/feature'));
+ run('branch','other-worktree','main');run('worktree','add','--quiet',path.join(root,'delete-other-worktree'),'other-worktree');assert.equal((await remove('other-worktree',{expectedCommit:main,force:true})).ok,false);assert.equal(run('rev-parse','other-worktree'),main);
+});
+function remoteDeleteFixture(name,remote='origin') {
+ const {folder,run}=mergeToFixture(name);run('checkout','main');
+ const bare=path.join(root,name+'-server.git');execFileSync('/usr/bin/git',['init','--bare','-q',bare]);
+ run('push','--quiet',bare,'refs/heads/main:refs/heads/main','refs/heads/feature:refs/heads/old/topic');
+ const tip=run('rev-parse','feature'),url='https://github.com/sikagit-fixture/disposable.git',log=path.join(tmp,name+'-push.jsonl');
+ run('remote','add',remote,url);run('update-ref',`refs/remotes/${remote}/old/topic`,tip);run('branch','old/topic','feature');
+ fs.writeFileSync(process.env.SIKAGIT_TEST_REMOTE_FIXTURE,JSON.stringify({url,bare,log}));
+ const server=(...args)=>execFileSync('/usr/bin/git',['--git-dir',bare,...args],{encoding:'utf8'}).trim();
+ const remove=(extra={})=>request('/api/v1/git/branch/delete-remote',{repo:folder,branch:`remotes/${remote}/old/topic`,expectedCommit:tip,...extra});
+ return {folder,run,server,remove,tip,log,url};
+}
+test('remote branch deletion removes only the leased server branch and tracking ref, preserving local branches and tags',async()=>{
+ const {run,server,remove,tip,log}=remoteDeleteFixture('delete-remote','team/origin');run('tag','keep-tag');
+ const response=await remove({expectedCommit:tip.slice(0,7)});assert.equal(response.status,200,await response.text());
+ assert.throws(()=>server('show-ref','--verify','refs/heads/old/topic'));assert.throws(()=>run('show-ref','--verify','refs/remotes/team/origin/old/topic'));
+ assert.equal(run('rev-parse','old/topic'),tip);assert.equal(run('branch','--show-current'),'main');assert.equal(server('rev-parse','main'),run('rev-parse','main'));assert.throws(()=>server('show-ref','--verify','refs/tags/keep-tag'));
+ const calls=fs.readFileSync(log,'utf8').trim().split('\n').map(JSON.parse);assert.equal(calls.length,1);assert(calls[0].includes(`--force-with-lease=refs/heads/old/topic:${tip}`));assert(calls[0].includes(':refs/heads/old/topic'));assert(calls[0].includes('--no-follow-tags'));assert(calls[0].includes('--recurse-submodules=no'));
+});
+test('remote deletion refuses stale remote tips and keeps tracking/local refs after a failed lease',async()=>{
+ const {run,server,remove,tip}=remoteDeleteFixture('delete-remote-stale');const changed=run('rev-parse','main');server('update-ref','refs/heads/old/topic',changed);
+ const response=await remove();assert.equal(response.ok,false);assert.match((await response.json()).error,/Fetch and review/);assert.equal(server('rev-parse','old/topic'),changed);assert.equal(run('rev-parse','refs/remotes/origin/old/topic'),tip);assert.equal(run('rev-parse','old/topic'),tip);
+});
+test('remote deletion rejects unsafe push targets, aliases, invalid refs and force flags before any network mutation',async()=>{
+ const {run,server,remove,tip,log,url}=remoteDeleteFixture('delete-remote-reject');
+ for(const extra of [{expectedCommit:undefined},{expectedCommit:[]},{expectedCommit:'--all'},{expectedCommit:run('rev-parse','main')},{branch:'remotes/origin/../main'},{branch:'remotes/origin/-bad'},{branch:'main'},{force:true},{force:false}])assert.equal((await remove(extra)).ok,false);
+ run('symbolic-ref','refs/remotes/origin/HEAD','refs/remotes/origin/old/topic');assert.equal((await remove({branch:'remotes/origin/HEAD'})).ok,false);
+ for(const target of ['https://foreign.invalid/a/b','file:///tmp/server.git','ext::sh -c true','https://github.com@foreign.invalid/a/b']){
+  run('config','remote.origin.pushurl',target);assert.equal((await remove()).ok,false);assert.equal(server('rev-parse','old/topic'),tip);
+ }
+ run('config','--unset-all','remote.origin.pushurl');run('config','--add','remote.origin.pushurl',url);run('config','--add','remote.origin.pushurl',url);assert.equal((await remove()).ok,false);
+ assert.equal(fs.existsSync(log),false);assert.equal(run('rev-parse','refs/remotes/origin/old/topic'),tip);assert.equal(run('rev-parse','old/topic'),tip);
 });

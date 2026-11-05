@@ -1002,10 +1002,62 @@ export async function abortMerge(repoPath: string): Promise<void> {
   await git.merge(['--abort']);
 }
 
-export async function deleteBranch(repoPath: string, branchName: string, force = false): Promise<void> {
+async function checkedBranchTip(git: SimpleGit, ref: string, expectedCommit?: string): Promise<string> {
+  if (expectedCommit !== undefined && !/^[a-fA-F0-9]{4,64}$/.test(expectedCommit)) {
+    throw new Error('Invalid expected branch commit');
+  }
+  const tip = (await git.raw(['show-ref', '--verify', '--hash', ref])).trim();
+  if (expectedCommit && !tip.startsWith(expectedCommit.toLowerCase())) {
+    throw new Error('The branch changed. Refresh the branch list and review it before deleting.');
+  }
+  return tip;
+}
+
+export async function deleteBranch(repoPath: string, branchName: string, force = false, expectedCommit?: string): Promise<void> {
   safeRef(branchName);
   const git = getGit(repoPath);
-  await git.branch([force ? '-D' : '-d', branchName]);
+  await git.raw(['check-ref-format', `refs/heads/${branchName}`]);
+  await checkedBranchTip(git, `refs/heads/${branchName}`, expectedCommit);
+  const active = await git.raw(['symbolic-ref', '--quiet', 'HEAD']).then(s => s.trim(), () => '');
+  if (active === `refs/heads/${branchName}`) throw new Error('Cannot delete the active branch. Switch to another branch first.');
+  await git.branch([force ? '-D' : '-d', '--', branchName]);
+}
+
+export async function deleteRemoteBranch(repoPath: string, remoteBranch: string, expectedCommit: string): Promise<{ message: string }> {
+  safeRef(remoteBranch);
+  if (!remoteBranch.startsWith('remotes/')) throw new Error('Select a remote branch from the branch list.');
+  const git = getGit(repoPath, { network: true });
+  const label = remoteBranch.slice('remotes/'.length);
+  const remotes = (await git.getRemotes()).map(r => r.name).sort((a, b) => b.length - a.length);
+  const remote = remotes.find(name => label.startsWith(name + '/'));
+  if (!remote) throw new Error('The remote no longer exists. Fetch and refresh the branch list.');
+  safeRef(remote);
+  const branch = label.slice(remote.length + 1);
+  safeRef(branch);
+  const target = `refs/heads/${branch}`;
+  const tracking = `refs/remotes/${label}`;
+  await git.raw(['check-ref-format', target]);
+  const symbolic = await git.raw(['symbolic-ref', '--quiet', tracking]).then(s => !!s.trim(), () => false);
+  if (symbolic) throw new Error('Remote HEAD is an alias, not a deletable branch.');
+  if (!expectedCommit) throw new Error('An expected branch commit is required. Fetch and review the branch first.');
+  const tip = await checkedBranchTip(git, tracking, expectedCommit);
+  const urls = (await git.raw(['remote', 'get-url', '--push', '--all', remote])).trim().split('\n');
+  if (urls.length !== 1) throw new Error('Remote deletion requires exactly one push URL.');
+  safeRemote(urls[0]);
+  // Use the validated URL to avoid remote mirror/refspec configuration. Only
+  // this branch is sent, and the server must still have the last-fetched tip.
+  try {
+    await git.push(['--porcelain', '--progress', '--no-follow-tags', '--recurse-submodules=no', '--no-signed',
+      `--force-with-lease=${target}:${tip}`, urls[0], `:${target}`]);
+  } catch (err) {
+    const text = err instanceof Error ? err.message : '';
+    if (/stale info|force-with-lease/i.test(text)) throw new Error('The remote branch changed since the last Fetch. Fetch and review it before deleting.');
+    throw describeNetworkError(err, 'Delete remote branch');
+  }
+  // Do not remove a tracking ref that an external fetch updated meanwhile.
+  try { await git.raw(['update-ref', '-d', tracking, tip]); }
+  catch { return { message: `Deleted ${label} on the server. Fetch to refresh its changed tracking reference.` }; }
+  return { message: `Deleted remote branch ${label}. Local branches were kept.` };
 }
 
 export async function checkoutCommit(repoPath: string, commitHash: string): Promise<{ branch: string }> {

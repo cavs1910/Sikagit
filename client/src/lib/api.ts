@@ -126,10 +126,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo }),
     }),
-  deleteBranch: (repo: string, branch: string, force?: boolean) =>
+  deleteBranch: (repo: string, branch: string, force?: boolean, expectedCommit?: string) =>
     request<void>('/git/branch/delete', {
       method: 'POST',
-      body: JSON.stringify({ repo, branch, force }),
+      body: JSON.stringify({ repo, branch, force, expectedCommit }),
+    }),
+  deleteRemoteBranch: (repo: string, branch: string, expectedCommit: string) =>
+    request<{ message: string }>('/git/branch/delete-remote', {
+      method: 'POST',
+      body: JSON.stringify({ repo, branch, expectedCommit }),
     }),
   getTags: (repo: string) => request<import('@sikagit/shared').GitTag[]>(`/git/tags?repo=${encodeURIComponent(repo)}`),
   getCommitFiles: (repo: string, commit: string) =>

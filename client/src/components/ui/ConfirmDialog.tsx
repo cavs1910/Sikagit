@@ -58,7 +58,7 @@ export function ConfirmDialog() {
               : <AlertTriangle size={18} className={iconColor} />
             }
           </div>
-          <div>
+          <div className="min-w-0 break-words">
             <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
             <p className="text-xs text-text-secondary mt-1 leading-relaxed whitespace-pre-line">{message}</p>
           </div>
