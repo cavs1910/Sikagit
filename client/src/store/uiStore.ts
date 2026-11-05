@@ -15,6 +15,7 @@ interface UIState {
   /** Whitespace noise filter applied to every diff view. */
   diffWhitespace: DiffWhitespaceMode;
   sidebarWidth: number;
+  explorerWidth: number;
   commitListWidth: number;
   bottomPanelHeight: number;
   colGraphWidth: number | null; // null = auto from lanes
@@ -40,6 +41,7 @@ interface UIState {
   setDiffLineHeight: (height: number) => void;
   setDiffWhitespace: (mode: DiffWhitespaceMode) => void;
   setSidebarWidth: (width: number) => void;
+  setExplorerWidth: (width: number) => void;
   setCommitListWidth: (width: number) => void;
   setBottomPanelHeight: (height: number) => void;
   setColGraphWidth: (width: number) => void;
@@ -82,6 +84,7 @@ export const useUIStore = create<UIState>()(
       // unfiltered it reports every line of a file as changed.
       diffWhitespace: 'eol',
       sidebarWidth: 240,
+      explorerWidth: 224,
       commitListWidth: 500,
       bottomPanelHeight: 320,
       colGraphWidth: null,
@@ -109,6 +112,9 @@ export const useUIStore = create<UIState>()(
       setDiffWhitespace: (mode: DiffWhitespaceMode) => set({ diffWhitespace: mode }),
       setSidebarWidth: (width: number) => set({
         sidebarWidth: clamp(width, SIDEBAR_MIN, SIDEBAR_MAX),
+      }),
+      setExplorerWidth: (width: number) => set({
+        explorerWidth: clamp(width, 180, 600),
       }),
       setCommitListWidth: (width: number) => set({
         commitListWidth: clamp(width, COMMIT_LIST_MIN, window.innerWidth * COMMIT_LIST_MAX_RATIO),

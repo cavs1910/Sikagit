@@ -1,6 +1,6 @@
 import { useUIStore } from '../../store/uiStore';
 import { useMobile } from '../../hooks/useMobile';
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import {
   ChevronRight,
   ChevronDown,
@@ -24,6 +24,7 @@ import { useRepoStatusStore } from "../../store/repoStatusStore";
 import { useRepoStore } from "../../store/repoStore";
 import { useToastStore } from "../../store/toastStore";
 import { cn } from "../../lib/utils";
+import { ResizeHandle } from "../ui/ResizeHandle";
 const CodeEditor = lazy(() => import("./CodeEditor"));
 function Directory({
   repo,
@@ -161,6 +162,14 @@ export function FilesWorkspace({
     ([, item]) => item.repo === repoPath,
   );
   const showIgnored = useUIStore(s => s.showIgnoredFiles);
+  const explorerWidth = useUIStore(s => s.explorerWidth);
+  const setExplorerWidth = useUIStore(s => s.setExplorerWidth);
+  const explorerRef = useRef<HTMLElement>(null);
+  const handleExplorerResize = useCallback((delta: number) => {
+    if (explorerRef.current) {
+      setExplorerWidth(explorerRef.current.getBoundingClientRect().width + delta);
+    }
+  }, [setExplorerWidth]);
   const [refresh, setRefresh] = useState(0),
     [filter, setFilter] = useState(""),
     [showTree, setShowTree] = useState(true);
@@ -228,9 +237,11 @@ export function FilesWorkspace({
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
       <aside
+        ref={explorerRef}
+        style={{ width: mobile ? undefined : explorerWidth }}
         className={cn(
-          "shrink-0 border-r border-border flex-col bg-bg-secondary",
-          mobile ? "w-full" : "w-56 max-w-[45%]",
+          "shrink-0 flex-col bg-bg-secondary",
+          mobile ? "w-full border-r border-border" : "max-w-[60%]",
           treeVisible ? "flex" : "hidden",
         )}
       >
@@ -267,6 +278,9 @@ export function FilesWorkspace({
           />
         </div>
       </aside>
+      {!mobile && treeVisible && (
+        <ResizeHandle direction="horizontal" onResize={handleExplorerResize} />
+      )}
       {(!mobile || (!!doc && !treeVisible)) && <section className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <div className="flex border-b border-border bg-bg-secondary min-h-9 shrink-0">
           <button
