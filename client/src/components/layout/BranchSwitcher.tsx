@@ -5,6 +5,7 @@ import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useToastStore } from '../../store/toastStore';
 import { useConfirmStore } from '../../store/confirmStore';
+import { BranchCleanupDialog } from '../operations/BranchCleanupDialog';
 import { cn } from '../../lib/utils';
 import type { GitBranch as GitBranchType } from '@sikagit/shared';
 
@@ -32,6 +33,7 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
   const [filter, setFilter] = useState('');
   const [switching, setSwitching] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
   const busy = !!switching || !!deleting;
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -185,6 +187,11 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
           </div>
           <div className="shrink-0 border-t border-border p-2 bg-bg-secondary">
             <button
+              type="button" disabled={busy}
+              onClick={() => { setOpen(false); setCleanupOpen(true); }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-text-secondary hover:bg-bg-tertiary disabled:opacity-40"
+            ><Trash2 size={14} className="shrink-0" />Clean up merged branches…</button>
+            <button
               type="button"
               disabled={busy}
               onClick={() => { setOpen(false); setFilter(''); onMerge('from'); }}
@@ -205,6 +212,7 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
           </div>
         </div>
       )}
+      {cleanupOpen && <BranchCleanupDialog repoPath={repoPath} onClose={() => setCleanupOpen(false)} />}
     </div>
   );
 }

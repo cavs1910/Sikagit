@@ -2,6 +2,7 @@ import { confinedFile, safeRevision } from '../security';
 import { Router, Request, Response, NextFunction } from 'express';
 import { validateRepoPath } from '../middleware/validatePath';
 import * as gitService from '../services/gitService';
+import { previewBranchCleanup, executeBranchCleanup } from '../services/branchCleanup';
 import { withRepoLock } from '../services/gitService';
 import { computeGraph } from '../services/graphService';
 import * as db from '../services/db';
@@ -10,12 +11,12 @@ const router = Router();
 
 // Prevent truthy JSON strings (such as force: "false") from enabling destructive options.
 router.use((req, res, next) => {
-  for (const key of ['amend', 'force', 'setUpstream', 'allowUnrelatedHistories']) {
+  for (const key of ['amend', 'force', 'setUpstream', 'allowUnrelatedHistories', 'includeLocal', 'includeRemote']) {
     if (req.body?.[key] !== undefined && typeof req.body[key] !== 'boolean') {
       res.status(400).json({ success: false, error: `${key} must be a boolean` }); return;
     }
   }
-  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'targetBranch', 'expectedCommit', 'key', 'value', 'url', 'branchName', 'patch']) {
+  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'targetBranch', 'expectedCommit', 'baseRef', 'planId', 'key', 'value', 'url', 'branchName', 'patch']) {
     if (req.body?.[key] !== undefined && typeof req.body[key] !== 'string') {
       res.status(400).json({ success: false, error: `${key} must be a string` }); return;
     }
@@ -347,6 +348,23 @@ router.post('/merge/abort', asyncHandler(async (req: Request, res: Response) => 
   const repoPath = (req as any).repoPath;
   await withRepoLock(repoPath, () => gitService.abortMerge(repoPath));
   res.json({ success: true });
+}));
+
+router.post('/branch/cleanup/preview', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { baseRef, includeLocal = true, includeRemote = false } = req.body;
+  const result = await withRepoLock(repoPath, () => previewBranchCleanup(repoPath, { baseRef, includeLocal, includeRemote }));
+  res.json({ success: true, data: result });
+}));
+
+router.post('/branch/cleanup/execute', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  if (!req.body.planId || req.body.force !== undefined) {
+    res.status(400).json({ success: false, error: 'A cleanup preview is required; cleanup cannot be forced' });
+    return;
+  }
+  const result = await withRepoLock(repoPath, () => executeBranchCleanup(repoPath, req.body.planId, req.body.refs));
+  res.json({ success: true, data: result });
 }));
 
 router.post('/branch/delete', asyncHandler(async (req: Request, res: Response) => {

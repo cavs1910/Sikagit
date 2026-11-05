@@ -117,7 +117,7 @@ function readHostGitConfig(key: string): string {
   return '';
 }
 
-function getGit(repoPath: string, opts: { network?: boolean; timeoutMs?: number } = {}): SimpleGit {
+export function getGit(repoPath: string, opts: { network?: boolean; timeoutMs?: number } = {}): SimpleGit {
   const normalized = normalizePath(repoPath);
   // core.quotepath=false makes git emit non-ASCII paths (Arabic, CJK, accents…)
   // as raw UTF-8 instead of octal escapes like "\330\261\331\210...". Simple-git
@@ -1023,10 +1023,9 @@ export async function deleteBranch(repoPath: string, branchName: string, force =
   await git.branch([force ? '-D' : '-d', '--', branchName]);
 }
 
-export async function deleteRemoteBranch(repoPath: string, remoteBranch: string, expectedCommit: string): Promise<{ message: string }> {
+async function prepareRemoteDeletion(git: SimpleGit, remoteBranch: string, expectedCommit: string) {
   safeRef(remoteBranch);
   if (!remoteBranch.startsWith('remotes/')) throw new Error('Select a remote branch from the branch list.');
-  const git = getGit(repoPath, { network: true });
   const label = remoteBranch.slice('remotes/'.length);
   const remotes = (await git.getRemotes()).map(r => r.name).sort((a, b) => b.length - a.length);
   const remote = remotes.find(name => label.startsWith(name + '/'));
@@ -1044,11 +1043,26 @@ export async function deleteRemoteBranch(repoPath: string, remoteBranch: string,
   const urls = (await git.raw(['remote', 'get-url', '--push', '--all', remote])).trim().split('\n');
   if (urls.length !== 1) throw new Error('Remote deletion requires exactly one push URL.');
   safeRemote(urls[0]);
+  return { label, target, tracking, tip, url: urls[0] };
+}
+
+export async function verifyRemoteBranchTip(repoPath: string, branch: string, expectedCommit: string): Promise<void> {
+  const git = getGit(repoPath, { network: true });
+  const base = await prepareRemoteDeletion(git, branch, expectedCommit);
+  const advertised = await git.raw(['ls-remote', '--exit-code', '--heads', base.url, base.target]);
+  if (advertised.trim().split(/\s+/)[0] !== base.tip) {
+    throw new Error('The remote main/master changed since Fetch. Fetch and generate a new cleanup preview.');
+  }
+}
+
+export async function deleteRemoteBranch(repoPath: string, remoteBranch: string, expectedCommit: string): Promise<{ message: string }> {
+  const git = getGit(repoPath, { network: true });
+  const { label, target, tracking, tip, url } = await prepareRemoteDeletion(git, remoteBranch, expectedCommit);
   // Use the validated URL to avoid remote mirror/refspec configuration. Only
   // this branch is sent, and the server must still have the last-fetched tip.
   try {
     await git.push(['--porcelain', '--progress', '--no-follow-tags', '--recurse-submodules=no', '--no-signed',
-      `--force-with-lease=${target}:${tip}`, urls[0], `:${target}`]);
+      `--force-with-lease=${target}:${tip}`, url, `:${target}`]);
   } catch (err) {
     const text = err instanceof Error ? err.message : '';
     if (/stale info|force-with-lease/i.test(text)) throw new Error('The remote branch changed since the last Fetch. Fetch and review it before deleting.');

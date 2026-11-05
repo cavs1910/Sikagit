@@ -645,3 +645,54 @@ test('remote deletion rejects unsafe push targets, aliases, invalid refs and for
  run('config','--unset-all','remote.origin.pushurl');run('config','--add','remote.origin.pushurl',url);run('config','--add','remote.origin.pushurl',url);assert.equal((await remove()).ok,false);
  assert.equal(fs.existsSync(log),false);assert.equal(run('rev-parse','refs/remotes/origin/old/topic'),tip);assert.equal(run('rev-parse','old/topic'),tip);
 });
+
+async function cleanupPreview(folder,options={}) {
+ const response=await request('/api/v1/git/branch/cleanup/preview',{repo:folder,...options});const result=await response.json();assert.equal(response.status,200,JSON.stringify(result));return result.data;
+}
+const cleanupExecute=(folder,plan,refs,extra={})=>request('/api/v1/git/branch/cleanup/execute',{repo:folder,planId:plan.planId,refs,...extra});
+test('merged cleanup uses exact ancestry, excludes squash/cherry-picks, primary branches and worktrees, and deletes only confirmed references',async()=>{
+ const {folder,run}=mergeToFixture('cleanup-ancestry');run('checkout','main');run('merge','--ff-only','feature');run('branch','merged/topic');run('branch','master');run('branch','worktree/topic');run('worktree','add','--quiet',path.join(root,'cleanup-other-worktree'),'worktree/topic');
+ run('checkout','-qb','squash/topic');fs.writeFileSync(path.join(folder,'squash.txt'),'squash\n');run('add','.');run('commit','-qm','squash source');run('checkout','main');run('merge','--squash','squash/topic');run('commit','-qm','squashed');
+ run('checkout','-qb','cherry/topic');fs.writeFileSync(path.join(folder,'cherry.txt'),'cherry\n');run('add','.');run('commit','-qm','cherry source');run('checkout','main');run('commit','--allow-empty','-qm','diverge before cherry');run('cherry-pick','cherry/topic');
+ const head=run('rev-parse','HEAD'),tree=run('write-tree'),plan=await cleanupPreview(folder,{baseRef:'refs/heads/main'});
+ assert.deepEqual(plan.candidates.map(c=>c.name).sort(),['feature','merged/topic']);assert.equal(run('rev-parse','HEAD'),head);assert.equal(run('write-tree'),tree);
+ const response=await cleanupExecute(folder,plan,['refs/heads/merged/topic']);assert.equal(response.status,200);assert.deepEqual((await response.json()).data.results.map(r=>r.status),['deleted']);
+ assert.throws(()=>run('show-ref','--verify','refs/heads/merged/topic'));for(const name of ['main','master','feature','squash/topic','cherry/topic','worktree/topic'])assert(run('rev-parse',name));assert.equal(run('rev-parse','HEAD'),head);assert.equal(run('write-tree'),tree);
+ assert.equal((await cleanupExecute(folder,plan,['refs/heads/feature'])).ok,false);
+});
+test('cleanup plans reject forged selections, force flags, stale tips/base, new checkouts and cross-repository execution before deleting anything',async()=>{
+ const {folder,run}=mergeToFixture('cleanup-stale');run('checkout','main');run('merge','--ff-only','feature');run('branch','old/topic');
+ let plan=await cleanupPreview(folder),refs=['refs/heads/feature'];
+ for(const selected of [['refs/heads/main'],['refs/heads/feature','refs/heads/feature'],['--all'],[{}],[]])assert.equal((await cleanupExecute(folder,plan,selected)).ok,false);
+ assert.equal((await cleanupExecute(folder,plan,refs,{force:true})).ok,false);assert.equal((await request('/api/v1/git/branch/cleanup/preview',{repo:folder,includeRemote:'false'})).status,400);
+ const other=mergeToFixture('cleanup-other-repo');assert.equal((await cleanupExecute(other.folder,plan,refs)).ok,false);
+ run('commit','--allow-empty','-qm','new base');assert.equal((await cleanupExecute(folder,plan,refs)).ok,false);assert(run('rev-parse','feature'));
+ plan=await cleanupPreview(folder);run('update-ref','refs/heads/feature',run('rev-parse','main'));assert.equal((await cleanupExecute(folder,plan,refs)).ok,false);
+ plan=await cleanupPreview(folder);run('checkout','feature');assert.equal((await cleanupExecute(folder,plan,refs)).ok,false);assert(run('rev-parse','old/topic'));
+});
+test('remote cleanup uses only the chosen published main/master, ignores unpublished merges and preserves other remotes and local counterparts',async()=>{
+ const {folder,run,server,tip,url,log}=remoteDeleteFixture('cleanup-remote');const original=run('rev-parse','main');run('update-ref','refs/remotes/origin/main',original);run('merge','--ff-only','feature');
+ let plan=await cleanupPreview(folder,{baseRef:'refs/remotes/origin/main',includeLocal:false,includeRemote:true});assert.equal(plan.candidates.length,0);
+ assert.equal((await request('/api/v1/git/branch/cleanup/preview',{repo:folder,baseRef:'refs/heads/main',includeRemote:true})).ok,false);
+ server('update-ref','refs/heads/main',tip);run('update-ref','refs/remotes/origin/main',tip);run('remote','add','upstream',url);run('update-ref','refs/remotes/upstream/main',tip);run('update-ref','refs/remotes/upstream/old/topic',tip);run('symbolic-ref','refs/remotes/origin/HEAD','refs/remotes/origin/main');
+ plan=await cleanupPreview(folder,{baseRef:'refs/remotes/origin/main',includeLocal:false,includeRemote:true});assert.deepEqual(plan.candidates.map(c=>c.name),['remotes/origin/old/topic']);
+ const response=await cleanupExecute(folder,plan,plan.candidates.map(c=>c.ref));assert.equal(response.status,200);assert.equal((await response.json()).data.results[0].status,'deleted');
+ assert.throws(()=>server('show-ref','--verify','refs/heads/old/topic'));assert.equal(run('rev-parse','old/topic'),tip);assert.equal(run('rev-parse','refs/remotes/upstream/old/topic'),tip);assert.equal(server('rev-parse','main'),tip);assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,1);
+});
+test('cleanup checks the current remote base before any local or remote deletion',async()=>{
+ const {folder,run,server,tip,log}=remoteDeleteFixture('cleanup-remote-base');const original=run('rev-parse','main');server('update-ref','refs/heads/main',tip);run('update-ref','refs/remotes/origin/main',tip);
+ const plan=await cleanupPreview(folder,{baseRef:'refs/remotes/origin/main',includeLocal:true,includeRemote:true});server('update-ref','refs/heads/main',original);
+ const response=await cleanupExecute(folder,plan,['refs/heads/old/topic','refs/remotes/origin/old/topic']);assert.equal(response.ok,false);assert.match((await response.json()).error,/remote main\/master changed/);assert.equal(run('rev-parse','old/topic'),tip);assert.equal(server('rev-parse','old/topic'),tip);assert.equal(fs.existsSync(log),false);
+});
+test('cleanup reports partial results, stops remote deletion after a stale lease and never retries a consumed plan',async()=>{
+ const {folder,run,server,tip,log}=remoteDeleteFixture('cleanup-partial');const original=run('rev-parse','main');run('merge','--ff-only','feature');server('update-ref','refs/heads/main',tip);run('update-ref','refs/remotes/origin/main',tip);server('update-ref','refs/heads/old/second',tip);run('update-ref','refs/remotes/origin/old/second',tip);
+ const plan=await cleanupPreview(folder,{baseRef:'refs/remotes/origin/main',includeRemote:true});server('update-ref','refs/heads/old/topic',original);
+ const refs=['refs/heads/old/topic','refs/remotes/origin/old/topic','refs/remotes/origin/old/second'];const response=await cleanupExecute(folder,plan,refs);assert.equal(response.status,200);const result=(await response.json()).data;assert.deepEqual(result.results.map(r=>r.status),['deleted','failed','skipped']);assert.match(result.results[1].message,/Fetch and review/);assert.equal(server('rev-parse','old/second'),tip);assert.equal(server('rev-parse','old/topic'),original);assert.equal(fs.readFileSync(log,'utf8').trim().split('\n').length,1);assert.equal((await cleanupExecute(folder,plan,refs)).ok,false);
+});
+test('cleanup previews are bounded and expire without mutating repository state',async()=>{
+ const {folder,run}=mergeToFixture('cleanup-bounds');run('checkout','main');const hash=run('rev-parse','HEAD');
+ execFileSync('/usr/bin/git',['-C',folder,'update-ref','--stdin'],{input:Array.from({length:205},(_,i)=>`create refs/heads/old/${i.toString().padStart(3,'0')} ${hash}`).join('\n')+'\n',encoding:'utf8'});
+ const cleanup=require('/app/server/dist/server/src/services/branchCleanup.js');const plan=await cleanup.previewBranchCleanup(folder,{includeLocal:true,includeRemote:false});assert.equal(plan.candidates.length,200);assert.equal(plan.totalCandidates,205);assert.equal(run('rev-parse','HEAD'),hash);
+ const now=Date.now;try{Date.now=()=>plan.expiresAt+1;await assert.rejects(()=>cleanup.executeBranchCleanup(folder,plan.planId,[plan.candidates[0].ref]),/expired/);}finally{Date.now=now;}
+ assert.equal(run('for-each-ref','--format=%(refname)','refs/heads/old').split('\n').length,205);
+});

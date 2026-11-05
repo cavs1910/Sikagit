@@ -136,6 +136,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo, branch, expectedCommit }),
     }),
+  previewBranchCleanup: (repo: string, baseRef?: string, includeLocal = true, includeRemote = false) =>
+    request<import('@sikagit/shared').BranchCleanupPreview>('/git/branch/cleanup/preview', {
+      method: 'POST', body: JSON.stringify({ repo, baseRef, includeLocal, includeRemote }),
+    }),
+  executeBranchCleanup: (repo: string, planId: string, refs: string[]) =>
+    request<import('@sikagit/shared').BranchCleanupResult>('/git/branch/cleanup/execute', {
+      method: 'POST', body: JSON.stringify({ repo, planId, refs }),
+    }),
   getTags: (repo: string) => request<import('@sikagit/shared').GitTag[]>(`/git/tags?repo=${encodeURIComponent(repo)}`),
   getCommitFiles: (repo: string, commit: string) =>
     request<{ path: string; status: string }[]>(`/git/commit-files?repo=${encodeURIComponent(repo)}&commit=${encodeURIComponent(commit)}`),

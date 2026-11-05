@@ -37,6 +37,32 @@ HEAD aliases have no trash button. Deletion supports a single HTTPS GitHub push
 URL per remote, validated before sending only the selected branch deletion;
 custom mirror/refspec configuration, tags and submodules are not pushed.
 
+**Clean up merged branches…** opens a read-only preview. Choose an existing
+local or remote `main`/`master`, include local branches and optionally branches
+on that same remote, review the candidate list and deselect anything to keep.
+Remote cleanup requires a remote base: unpublished merges into a local main
+are insufficient. Remote references reflect the last Fetch; the server checks
+that the published main/master still matches before starting deletion.
+
+Eligibility uses Git ancestry (`for-each-ref --merged`) with matching exact
+commit IDs. Merges and fast-forwards qualify; squash/cherry-pick equivalents
+are conservatively omitted. Main, master, symbolic remote HEAD and branches
+checked out in any worktree (including their same-name remote counterparts)
+are preserved. Previews expire after 15 minutes, are single-use, cover at most
+200 eligible references per batch and are bound to the repository, base and
+selected tips. Changed refs or worktree protection invalidate the preview before
+any deletion. Local deletion retains Git's ordinary `-d` check, so a branch
+merged into the chosen base can still be kept if the current branch/upstream
+does not contain it; update/check out main/master and preview again. There is
+no bulk force override. Remote deletions retain the per-branch lease.
+
+Cleanup reports deleted, failed and skipped branches individually. Successful
+deletions remain if a later operation fails. A remote error stops subsequent
+remote deletions, and a changed base or the batch time limit stops the remaining
+work. Refresh the preview before another batch; no automatic retries or rollback
+are performed. The repository mutex serializes application mutations, while
+external Git processes remain outside it as described in the security review.
+
 The Git workspace provides History and Changes views. Selecting a commit or file
 opens its detail at the full available width; Back returns to the previous view.
 The mobile history hides the Type, Author, Date and Hash columns; commit details
@@ -93,3 +119,9 @@ overflow at 320/390/1280px. Backend tests use disposable repositories and a
 test-only Git transport adapter for one fixed fake GitHub URL to a local bare
 repository. This exercises actual leased deletion without networking; the adapter
 is never loaded or copied into production, and real repositories are not mounted.
+
+`node tests/branch-cleanup.browser.cjs` verifies base/scope selection, deselection,
+confirmation/cancellation, stale previews, busy state and partial results with
+mocked APIs at 320/390/1280px. Isolated Git cases cover ancestry versus squash and
+cherry-picks, worktrees, stale and forged plans, expiry/bounds, published-base
+checks, leases and partial failure without real networking.

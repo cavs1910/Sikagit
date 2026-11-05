@@ -173,3 +173,23 @@ export interface AIErrorDetails {
   outputTokens?: number;
   reasoningTokens?: number;
 }
+
+export interface BranchCleanupCandidate {
+  ref: string;
+  name: string;
+  commit: string;
+  isRemote: boolean;
+}
+export type BranchCleanupBase = BranchCleanupCandidate;
+export interface BranchCleanupPreview {
+  planId: string;
+  expiresAt: number;
+  base: BranchCleanupBase;
+  bases: BranchCleanupBase[];
+  candidates: BranchCleanupCandidate[];
+  totalCandidates: number;
+  limit: number;
+}
+export interface BranchCleanupResult {
+  results: Array<BranchCleanupCandidate & { status: 'deleted' | 'failed' | 'skipped'; message?: string }>;
+}
