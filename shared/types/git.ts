@@ -120,6 +120,7 @@ export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
+  aiError?: AIErrorDetails;
 }
 
 /**
@@ -157,4 +158,18 @@ export interface AIModelInfo {
 export interface AIModelCatalog {
   provider: string; models: AIModelInfo[]; sourceName: string; sourceURL: string; pricingURL: string;
   updatedAt: string; stale: boolean; sourceType: 'live' | 'cache' | 'snapshot'; warning: string | null;
+}
+
+/** Safe AI failure metadata; excludes provider payloads and generated content. */
+export interface AIErrorDetails {
+  code: 'output_limit' | 'content_filter' | 'authentication' | 'quota' | 'rate_limit' | 'model_not_found' | 'timeout' | 'context_limit' | 'unsupported_output' | 'provider_unavailable' | 'invalid_request' | 'invalid_json' | 'invalid_response' | 'empty_response' | 'network' | 'unknown';
+  requestId: string;
+  provider: string;
+  model: string;
+  responseMode: 'structured' | 'json';
+  maxOutputTokens: number;
+  httpStatus?: number;
+  finishReason?: string;
+  outputTokens?: number;
+  reasoningTokens?: number;
 }

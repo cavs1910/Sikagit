@@ -44,6 +44,26 @@ Suggestions send the relevant diff and filenames to the selected provider, throu
 
 Requests time out after 60 seconds, have no application-level automatic retries and allow at most three simultaneous generations per server. These limits do not replace provider spending limits. Provider errors are sanitized before returning to the client.
 
+Failures now distinguish output-token exhaustion (including reasoning), content
+filtering, invalid JSON, invalid commit fields, authentication, billing/quota,
+rate limits, unavailable models, rejected output formats, context limits,
+provider outages, timeouts and network failures. Provider messages and generated
+content are never shown verbatim. Smart Commit displays the connection, output
+mode and limit, available finish reason/token usage and a reference ID. The
+server logs only allowlisted diagnostic metadata with that ID, excluding keys,
+request/response bodies, generated content and filenames. Historical generic
+failures cannot be reconstructed from these new diagnostics.
+
+After failed analysis, **AI settings** opens the AI tab directly and **Retry
+analysis** explicitly starts a new request. Opening/saving settings does not
+retry, and saved token limits and output mode are never changed automatically.
+No commits are created by failed analysis; staged content remains intact. A
+small successful connection test does not establish that a larger Smart Commit
+response will fit the output budget. If the model reaches the output limit,
+increase **Advanced limits → Maximum output tokens**, stage fewer files or
+choose a model that can complete the response within the budget. Retries can
+incur charges. Smart Commit asks for concise descriptions to conserve output.
+
 ## Smart Commit integrity
 
 Previews are bound to the repository, HEAD and an exact index tree; they expire after 15 minutes and can be executed once. Groups must contain every staged path exactly once. Changed HEAD or index requires a new preview. Execution restores each group's blobs from the saved index tree instead of staging working files, preserving partially staged content. If a later group fails, earlier commits remain and remaining changes are restored to the index; the error reports the number of completed commits. Review history before retrying. Repository operations share SikaGit's lock, but external Git processes are outside that lock.
@@ -51,6 +71,13 @@ Previews are bound to the repository, HEAD and an exact index tree; they expire 
 ## Validation
 
 `tests/security.test.cjs` runs without external networking in the production image. An isolated test-only fetch mock exercises real Vercel AI SDK request/response parsing, configuration encryption, key replacement boundaries, sanitized errors, structured output, JSON compatibility, shelving, stale previews, invalid group paths, single-use plans and partial staging. The mock is not loaded or copied into the production application. Live provider calls require the owner's own credentials and are tested with the UI button.
+
+`tests/ai-errors.browser.cjs` mocks every API, covering mobile/desktop diagnostics,
+settings changes without generation, explicit retries and recovery to a preview
+without committing. `SIKAGIT_BROWSER_CLIENT` and `SIKAGIT_TEST_ORIGIN` select the
+browser client and running Vite/production frontend. Backend cases exercise
+Gateway HTTP errors, nested causes, invalid JSON/schema, exhausted output budgets
+with reasoning, recovery and secret-free responses/logs in both output modes.
 
 ### Deployment verification (2026-11-01)
 

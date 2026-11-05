@@ -13,11 +13,11 @@ global.fetch=async(url,init)=>{
  if(String(url)==='https://ai-gateway.vercel.sh/v4/ai/language-model') {
   const fixture=JSON.parse(fs.readFileSync(process.env.AI_TEST_FIXTURE,'utf8'));
   fs.appendFileSync(process.env.AI_TEST_GATEWAY_LOG,JSON.stringify({url:String(url),headers:Object.fromEntries(new Headers(init?.headers)),body:JSON.parse(init.body),redirect:init.redirect})+'\n');
-  if(fixture.status) return new Response(JSON.stringify({error:{message:'secret-provider-error-'+fixture.secret}}),{status:fixture.status,headers:{'content-type':'application/json'}});
-  return new Response(JSON.stringify({content:[{type:'text',text:JSON.stringify(fixture.output)}],finishReason:{unified:'stop',raw:'stop'},usage:{inputTokens:{total:1,noCache:1},outputTokens:{total:1,text:1}},warnings:fixture.warnings||[]}),{headers:{'content-type':'application/json'}});
+  if(fixture.status) return new Response(JSON.stringify({error:{message:'secret-provider-error-'+fixture.secret+(fixture.errorMessage||''),type:fixture.errorType,code:fixture.errorCode}}),{status:fixture.status,headers:{'content-type':'application/json'}});
+  return new Response(JSON.stringify({content:[{type:'text',text:fixture.rawText ?? JSON.stringify(fixture.output)}],finishReason:{unified:fixture.finishReason||'stop',raw:fixture.finishReason||'stop'},usage:{inputTokens:{total:1,noCache:1},outputTokens:{total:fixture.outputTokens??1,text:1,reasoning:fixture.reasoningTokens}},warnings:fixture.warnings||[]}),{headers:{'content-type':'application/json'}});
  }
  if(!String(url).startsWith('https://api.openai.com/')&&!String(url).startsWith('https://openrouter.ai/')) return original(url,init);
  const fixture=JSON.parse(fs.readFileSync(process.env.AI_TEST_FIXTURE,'utf8'));
- if(fixture.status) return new Response(JSON.stringify({error:{message:'secret-provider-error-'+fixture.secret}}),{status:fixture.status,headers:{'content-type':'application/json'}});
- return new Response(JSON.stringify({id:'chatcmpl-test',object:'chat.completion',created:1,model:'test-model',choices:[{index:0,message:{role:'assistant',content:JSON.stringify(fixture.output)},finish_reason:'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
+ if(fixture.status) return new Response(JSON.stringify({error:{message:'secret-provider-error-'+fixture.secret+(fixture.errorMessage||''),type:fixture.errorType,code:fixture.errorCode}}),{status:fixture.status,headers:{'content-type':'application/json'}});
+ return new Response(JSON.stringify({id:'chatcmpl-test',object:'chat.completion',created:1,model:'test-model',choices:[{index:0,message:{role:'assistant',content:fixture.rawText ?? JSON.stringify(fixture.output)},finish_reason:fixture.finishReason||'stop'}],usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2}}),{headers:{'content-type':'application/json'}});
 };

@@ -11,6 +11,7 @@ import { randomUUID } from "crypto";
 import { simpleGit } from "simple-git";
 import { getModelCatalog } from '../services/modelCatalog';
 import * as aiService from "../services/aiService";
+import { AIRequestError } from '../services/aiErrors';
 
 const router = Router();
 
@@ -25,6 +26,7 @@ function asyncHandler(
           error?.name === "ZodError"
             ? "Invalid AI configuration or response"
             : error.message || "AI request failed",
+        ...(error instanceof AIRequestError ? { aiError: error.details } : {}),
       });
     });
   };

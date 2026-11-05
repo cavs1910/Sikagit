@@ -18,7 +18,7 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const json: ApiResponse<T> = await res.json();
 
   if (!json.success) {
-    throw Object.assign(new Error(json.error || 'Request failed'), { status: res.status });
+    throw Object.assign(new Error(json.error || 'Request failed'), { status: res.status, aiError: json.aiError });
   }
 
   return json.data as T;

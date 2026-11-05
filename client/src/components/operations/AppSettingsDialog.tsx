@@ -8,6 +8,7 @@ import { cn } from '../../lib/utils';
 
 interface AppSettingsDialogProps {
   onClose: () => void;
+  initialTab?: Tab;
 }
 
 type Tab = 'general' | 'editor' | 'appearance' | 'ai';
@@ -65,7 +66,7 @@ function SizeControl({ label, value, onChange, min, max, description }: {
   );
 }
 
-export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
+export function AppSettingsDialog({ onClose, initialTab = 'general' }: AppSettingsDialogProps) {
   const {
     fontSize, setFontSize,
     diffFontSize, setDiffFontSize,
@@ -83,7 +84,7 @@ export function AppSettingsDialog({ onClose }: AppSettingsDialogProps) {
     catch (err) { useToastStore.getState().addToast('error', (err as Error).message); }
     finally { setSigningOut(false); }
   };
-  const [activeTab, setActiveTab] = useState<Tab>('general');
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
 
   // Draft state
   const [draftFontSize, setDraftFontSize] = useState(fontSize);

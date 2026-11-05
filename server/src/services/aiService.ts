@@ -5,6 +5,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { z } from "zod";
 import { configured } from "./aiSettings";
+import { diagnoseAIError, type Completion } from './aiErrors';
 
 // Provider warnings can contain request details, including BYOK credentials.
 globalThis.AI_SDK_LOG_WARNINGS = false;
@@ -54,6 +55,13 @@ async function generate<T>(
   if (activeRequests >= 3)
     throw new Error("AI is busy. Please wait for current requests to finish.");
   activeRequests++;
+  let completion: Completion = {};
+  const inspect = (result: { finishReason: string; usage: { outputTokens?: number; outputTokenDetails?: { reasoningTokens?: number } } }) => {
+    completion = { finishReason: result.finishReason, outputTokens: result.usage.outputTokens, reasoningTokens: result.usage.outputTokenDetails?.reasoningTokens };
+    if (result.finishReason === 'length' || result.finishReason === 'content-filter') {
+      throw new Error('Generation stopped before completion');
+    }
+  };
   try {
     if (s.responseMode === "json") {
       const result = await generateText({
@@ -66,6 +74,7 @@ async function generate<T>(
         maxRetries: 0,
         abortSignal: AbortSignal.timeout(60000),
       });
+      inspect(result);
       return schema.parse(
         JSON.parse(result.text.replace(/^```(?:json)?\s*|\s*```$/g, "")),
       );
@@ -80,20 +89,10 @@ async function generate<T>(
       maxRetries: 0,
       abortSignal: AbortSignal.timeout(60000),
     });
+    inspect(result);
     return schema.parse(result.output);
-  } catch (e: any) {
-    const status = e.statusCode;
-    throw new Error(
-      status === 401 || status === 403
-        ? "Provider rejected the API key or permissions"
-        : status === 429
-          ? "Provider rate limit or quota exceeded"
-          : status === 404
-            ? "Provider model was not found"
-            : e.name === "TimeoutError"
-              ? "AI request timed out"
-              : "AI request failed. Check the provider, model, quota and output mode.",
-    );
+  } catch (e: unknown) {
+    throw diagnoseAIError(e, s, completion);
   } finally {
     activeRequests--;
   }
@@ -145,7 +144,7 @@ export function validateGroups(groups: CommitGroup[], files: string[]) {
 export async function suggestSmartCommitGroups(diff: string, files: string[]) {
   const result = await generate(
     z.object({ groups: z.array(groupSchema).min(1).max(100) }),
-    "Group related staged files into logical commits. Use every exact file path once. Files: " +
+    "Group related staged files into logical commits. Use every exact file path once. Keep descriptions to one short sentence and titles within 72 characters. Keep the JSON concise and complete within the output budget. Files: " +
       JSON.stringify(files) +
       "\nDiff:\n" +
       diffText(diff),

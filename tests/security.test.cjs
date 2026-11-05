@@ -553,3 +553,49 @@ test('Merge To keeps the destination on a non-conflict merge failure without res
  const response=await request('/api/v1/git/merge-to',{repo:folder,sourceBranch:'feature',targetBranch:'unrelated'});assert.equal(response.ok,false);assert.match((await response.json()).error,/Merge failed on unrelated/);
  assert.equal(run('branch','--show-current'),'unrelated');assert.equal(run('rev-parse','HEAD'),target);assert.equal(run('rev-parse','feature'),source);assert.equal(run('status','--porcelain'),'');
 });
+
+test('AI failure diagnostics distinguish Gateway provider errors without leaking payloads or credentials',async()=>{
+ await aiSettings({provider:'vercel',model:'alibaba/test-model',apiKey:'fake-diagnostic-gateway-key',enabled:true,gatewayMode:'managed',responseMode:'structured',maxOutputTokens:2048});
+ for(const [status,extra,code] of [
+  [401,{},'authentication'],[403,{},'authentication'],[402,{},'quota'],[429,{},'rate_limit'],[404,{},'model_not_found'],
+  [400,{errorType:'invalid_request_error',errorMessage:' response_format json_schema unsupported'},'unsupported_output'],
+  [400,{errorType:'invalid_request_error',errorCode:'context_length_exceeded',errorMessage:' maximum context'},'context_limit'],
+  [422,{},'invalid_request'],[500,{},'provider_unavailable'],[503,{},'provider_unavailable'],[504,{},'timeout'],[424,{},'provider_unavailable']
+ ]){
+  fs.writeFileSync(fixtureFile,JSON.stringify({status,secret:'private-diagnostics-payload-marker',...extra}));
+  const response=await request('/api/v1/ai/test',{}),result=await response.json();assert.equal(response.status,400);assert.equal(result.aiError?.code,code,JSON.stringify(result));assert.equal(result.aiError.httpStatus,status);assert.match(result.aiError.requestId,/^[0-9a-f-]{36}$/);assert.equal(result.aiError.provider,'vercel');
+  for(const secret of ['private-diagnostics-payload-marker','fake-diagnostic-gateway-key']){assert.equal(JSON.stringify(result).includes(secret),false);assert.equal(logs.includes(secret),false);}
+ }
+});
+test('Smart Commit reports output budget, JSON and schema failures and recovers on a manual retry without altering Git state',async()=>{
+ const {folder,run}=mergeToFixture('ai-output-diagnostics');fs.writeFileSync(path.join(folder,'shared.txt'),'staged\n');run('add','.');
+ const head=run('rev-parse','HEAD'),tree=run('write-tree'),diff=run('diff','--cached');
+ const group={title:'fix: fixture',description:'',files:['shared.txt']};
+ const fail=async(fixture,expected)=>{
+  fs.writeFileSync(fixtureFile,JSON.stringify(fixture));const response=await request('/api/v1/ai/smart-commit/preview',{repo:folder}),result=await response.json();assert.equal(response.status,400);assert.equal(result.aiError?.code,expected,JSON.stringify(result));assert.equal(result.data,undefined);assert.equal(run('rev-parse','HEAD'),head);assert.equal(run('write-tree'),tree);assert.equal(run('diff','--cached'),diff);assert.equal(JSON.stringify(result).includes('private-generated-content-marker'),false);assert.equal(logs.includes('private-generated-content-marker'),false);return result;
+ };
+ for(const responseMode of ['structured','json']){
+  await aiSettings({responseMode});
+  for(const rawText of ['', '{"groups":[{"title":"private-generated-content-marker']){
+   const error=await fail({rawText,finishReason:'length',outputTokens:2048,reasoningTokens:2000},'output_limit');assert.match(error.error,/2048-token/);assert.equal(error.aiError.finishReason,'length');assert.equal(error.aiError.outputTokens,2048);assert.equal(error.aiError.reasoningTokens,2000);
+  }
+  await fail({rawText:'private-generated-content-marker invalid JSON'},'invalid_json');
+  const invalid=await fail({output:{groups:[{...group,title:'private-generated-content-marker'.repeat(4)}]}},'invalid_response');assert.match(invalid.error,/groups\[0\]\.title/);assert.match(invalid.error,/72/);
+  await fail({output:{groups:[group]},finishReason:'content-filter'},'content_filter');
+  // Neither settings changes nor failures trigger a second generation implicitly.
+  const calls=()=>fs.readFileSync(process.env.AI_TEST_GATEWAY_LOG,'utf8').trim().split('\n').length;
+  const before=calls();await aiSettings({maxOutputTokens:4096});assert.equal(calls(),before);
+  aiOutput({groups:[group]});const recovered=await (await request('/api/v1/ai/smart-commit/preview',{repo:folder})).json();assert.ok(recovered.data?.planId,JSON.stringify(recovered));assert.equal(run('rev-parse','HEAD'),head);assert.equal(run('write-tree'),tree);
+  await aiSettings({maxOutputTokens:2048});
+ }
+ await aiSettings({responseMode:'structured'});
+});
+test('AI error cause chains and schema issue diagnostics expose only fixed metadata',()=>{
+ const {diagnoseAIError}=require('/app/server/dist/server/src/services/aiErrors.js');
+ const context={provider:'vercel',model:'fixture-model',responseMode:'structured',maxOutputTokens:2048,apiKey:'private-context-key',byokApiKey:'private-byok-key',connections:{secret:'private-connection-secret'}};
+ const nested=diagnoseAIError({name:'GatewayInternalServerError',statusCode:500,cause:{name:'TimeoutError',message:'private-error-payload-marker',requestBodyValues:{apiKey:'private-secret'}}},context);assert.equal(nested.details.code,'timeout');
+ const network=diagnoseAIError({statusCode:500,cause:{code:'ENOTFOUND',message:'private-error-payload-marker'}},context);assert.equal(network.details.code,'network');
+ const unknown=diagnoseAIError(Error('private-error-payload-marker'),context);assert.equal(unknown.details.code,'unknown');
+ const {z}=require('/app/node_modules/zod');const parsed=z.object({title:z.string().max(72)}).safeParse({title:'private-error-payload-marker'.repeat(10)});assert.equal(parsed.success,false);const schema=diagnoseAIError(parsed.error,context);assert.equal(schema.details.code,'invalid_response');assert.match(schema.message,/title/);
+ for(const e of [nested,network,unknown,schema])assert.equal(JSON.stringify(e).includes('private-'),false);
+});

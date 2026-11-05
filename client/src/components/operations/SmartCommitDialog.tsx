@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, Sparkles, Loader2, GitCommitHorizontal, ChevronDown, ChevronRight, Pencil, Check, ArrowUp } from 'lucide-react';
+import type { AIErrorDetails } from '@sikagit/shared';
+import { AppSettingsDialog } from './AppSettingsDialog';
 import { api } from '../../lib/api';
 import { executeSmartCommit, describeSmartCommitSuccess } from '../../lib/smartCommit';
 import { useStatusStore } from '../../store/statusStore';
@@ -28,20 +30,40 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
   const [executing, setExecuting] = useState(false);
   const [pushAfterCommit, setPushAfterCommit] = useState(false);
   const [error, setError] = useState('');
+  const [aiError, setAIError] = useState<AIErrorDetails>();
+  const [attempt, setAttempt] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
   const [groups, setGroups] = useState<CommitGroup[]>([]);
   const [expandedGroup, setExpandedGroup] = useState<number | null>(0);
   const [editingGroup, setEditingGroup] = useState<number | null>(null);
 
   useEffect(() => {
-    api.aiSmartCommitPreview(repoPath)
-      .then(result => {
-        setGroups(result.groups);
-        setPlanId(result.planId);
-        setExpandedGroup(0);
-      })
-      .catch(err => setError(err.message || 'Failed to analyze changes'))
-      .finally(() => setLoading(false));
-  }, [repoPath]);
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+    setAIError(undefined);
+    setGroups([]);
+    setPlanId('');
+    // Defer until this effect survives cleanup, avoiding duplicate paid calls
+    // when React StrictMode probes the effect during development.
+    const timer = window.setTimeout(() => {
+      api.aiSmartCommitPreview(repoPath)
+        .then(result => {
+          if (cancelled) return;
+          setGroups(result.groups);
+          setPlanId(result.planId);
+          setExpandedGroup(0);
+        })
+        .catch(err => {
+          if (!cancelled) {
+            setError(err.message || 'Failed to analyze changes');
+            setAIError(err.aiError);
+          }
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
+    }, 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [repoPath, attempt]);
 
   const handleExecute = async () => {
     setExecuting(true);
@@ -95,6 +117,7 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
   };
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
       <div
         className="app-dialog bg-bg-secondary border border-border rounded-lg w-[560px] shadow-xl flex flex-col max-h-[80vh]"
@@ -123,8 +146,24 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
               <p className="text-[0.65rem] text-text-muted">AI is grouping related files into logical commits</p>
             </div>
           ) : error && groups.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 gap-2">
-              <p className="text-sm text-danger">{error}</p>
+            <div className="space-y-4 py-4">
+              <div role="alert" className="space-y-2">
+                <p className="text-sm text-danger break-words">{error}</p>
+                <p className="text-xs text-text-muted">Analysis failed. No commits were created; staged changes are preserved.</p>
+              </div>
+              {aiError && <dl className="text-xs space-y-1 text-text-secondary break-all">
+                <div><dt className="inline font-medium">Connection: </dt><dd className="inline">{aiError.provider === 'vercel' ? 'Vercel AI Gateway' : aiError.provider} · {aiError.model}</dd></div>
+                <div><dt className="inline font-medium">Output: </dt><dd className="inline">{aiError.responseMode === 'structured' ? 'JSON schema' : 'JSON text compatibility'} · limit {aiError.maxOutputTokens} tokens</dd></div>
+                {aiError.httpStatus && <div><dt className="inline font-medium">Provider HTTP status: </dt><dd className="inline">{aiError.httpStatus}</dd></div>}
+                {aiError.finishReason && <div><dt className="inline font-medium">Finish reason: </dt><dd className="inline">{aiError.finishReason}</dd></div>}
+                {aiError.outputTokens !== undefined && <div><dt className="inline font-medium">Output tokens used: </dt><dd className="inline">{aiError.outputTokens}{aiError.reasoningTokens !== undefined && ` (${aiError.reasoningTokens} reasoning)`}</dd></div>}
+                <div><dt className="inline font-medium">Reference: </dt><dd className="inline font-mono">{aiError.requestId}</dd></div>
+              </dl>}
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => setAttempt(n => n + 1)} className="px-3 py-2 rounded bg-accent-emphasis text-white text-xs">Retry analysis</button>
+                <button onClick={() => setShowSettings(true)} className="px-3 py-2 rounded border border-border text-text-secondary text-xs">AI settings</button>
+              </div>
+              <p className="text-xs text-text-muted">Retry sends a new AI request and may incur a charge. Opening or saving settings does not retry.</p>
             </div>
           ) : (
             <div className="space-y-2">
@@ -237,5 +276,7 @@ export function SmartCommitDialog({ repoPath, onClose }: SmartCommitDialogProps)
         </div>
       </div>
     </div>
+    {showSettings && <AppSettingsDialog initialTab="ai" onClose={() => setShowSettings(false)} />}
+    </>
   );
 }
