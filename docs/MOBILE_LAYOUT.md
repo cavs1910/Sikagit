@@ -11,8 +11,16 @@ only the bookmark, preserving files on disk. Desktop uses the same controls.
 The workspace tab bar contains **Show reflog** for History & Changes and the
 matching **Show Git-ignored files** switch for Files.
 
-The branch picker keeps a **Merge…** button in its footer while the branch list
-scrolls independently. It opens the existing merge dialog for the current branch.
+The branch picker keeps **Merge…** and **Merge To…** buttons in its footer while
+the branch list scrolls independently. **Merge…** brings another local branch
+into the current branch. **Merge To…** selects a different local destination
+(preferring `main` or `master`), previews current → destination and switches there
+before merging. It requires a clean working tree and checks that the source is
+still active under the repository mutex. It stays on the destination on success,
+conflict or merge failure; abort also leaves the destination checked out. The
+source is kept unless **Delete source branch after merge** is explicitly checked
+and the merge succeeds. Neither action pushes. Detached HEAD and repositories
+without another local branch disable **Merge To…**.
 
 The Git workspace provides History and Changes views. Selecting a commit or file
 opens its detail at the full available width; Back returns to the previous view.
@@ -55,3 +63,10 @@ With a freshly started Vite on loopback port 5184, run
 including delayed/out-of-order replies, and checks cache misses, A → B → A,
 status/branches/tags/history isolation, commit file selection, pending staging,
 both switches, mobile header and confirmed bookmark removal at 320/390/1280px.
+
+`node tests/merge-to.browser.cjs` uses the same browser settings and mocks all
+Git/API operations. It checks both merge directions, destination filtering,
+confirmation and busy controls, optional source deletion, conflicts/abort,
+errors, mobile overflow and the desktop Explorer divider at those widths.
+The production-image suite additionally exercises Merge To against disposable
+Git repositories, including dirty/stale requests and non-conflict failures.

@@ -28,6 +28,8 @@ Este archivo permite trabajar sin el chat original. Leelo antes de cambiar el pr
 
 - Estado por repo: cachés en memoria separadas por ruta (hasta 8 repos, historial hasta 1.000 commits), selección sincronizada y respuestas tardías aisladas. Switch de ignorados junto a Files; cabecera móvil con repo/rama/settings; quitar bookmark dentro de Settings. Ver `docs/MOBILE_LAYOUT.md` y `docs/REMOTE_STATUS.md`.
 
+- Ramas: el selector incluye **Merge…** (otra rama → actual) y **Merge To…** (actual → destino local). Merge To exige un árbol limpio, valida la rama activa y cambia/fusiona bajo el mutex. Permanece en destino al terminar o abortar; no hace push. Ver `docs/MOBILE_LAYOUT.md`.
+
 - Publicación: indicador de rama junto a Push y nubes por commit, basados en referencias remotas locales (último Fetch), sin consultas de red por fila. Ver `docs/REMOTE_STATUS.md`.
 
 - Login: formulario propio con `express-session` y sesiones revocables de 365 días en la SQLite existente; `AUTH_FILE` conserva el usuario/contraseña. Shell y assets públicos en el servicio privado, APIs y Socket.IO autenticados. Ver `docs/AUTHENTICATION.md`.
@@ -58,7 +60,7 @@ Leé `docs/SECURITY_REVIEW.md` antes de cambiar Git, autenticación, rutas o Doc
    sg docker -c 'sh scripts/test-security.sh'
    ```
 
-   La última ejecución de referencia pasó **50 pruebas**. Backend TypeScript y Vite compilan. El chequeo estricto del frontend conserva **35 diagnósticos preexistentes**: no declarar que pasa ni confundirlos con regresiones. Comparar contra la base si cambian.
+   La última ejecución de referencia pasó **54 pruebas**. Backend TypeScript y Vite compilan. El chequeo estricto del frontend conserva **35 diagnósticos preexistentes**: no declarar que pasa ni confundirlos con regresiones. Comparar contra la base si cambian.
 5. Para UI, probar el recorrido en navegador; para escrituras o AI usar fixtures desechables, no datos reales ni llamadas pagas. Para cambios de dependencias/seguridad, revisar npm audit y los escaneos apropiados. Los reportes privados están fuera del source.
 6. Para un despliegue de cambios de aplicación solicitado: respaldar SQLite mediante su API de backup (no copiar sólo el `.db` activo), conservar la imagen previa y reconstruir desde el Compose privado:
 

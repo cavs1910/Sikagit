@@ -17,7 +17,7 @@ const remoteLabel = (name: string) => name.replace(/^remotes\//, '');
  * dropdown of all local + remote branches. Selecting one switches to it via the
  * safe /git/switch-branch endpoint (creates a tracking branch for remotes).
  */
-export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPath: string; onMerge: () => void; compact?: boolean }) {
+export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPath: string; onMerge: (mode: 'from' | 'to') => void; compact?: boolean }) {
   const branches = useStatusStore(s => s.loadedRepo === repoPath ? s.branches : emptyBranches);
   const status = useStatusStore(s => s.loadedRepo === repoPath ? s.status : null);
   const ready = useStatusStore(s => s.loadedRepo === repoPath && s.branchesLoaded);
@@ -146,11 +146,20 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
             <button
               type="button"
               disabled={!!switching}
-              onClick={() => { setOpen(false); setFilter(''); onMerge(); }}
+              onClick={() => { setOpen(false); setFilter(''); onMerge('from'); }}
               className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-accent hover:bg-accent/10 disabled:opacity-40"
             >
               <GitMerge size={14} className="shrink-0" />
               Merge…
+            </button>
+            <button
+              type="button"
+              disabled={!!switching || !branches.some(b => b.current && !b.isRemote) || !branches.some(b => !b.current && !b.isRemote)}
+              onClick={() => { setOpen(false); setFilter(''); onMerge('to'); }}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-accent hover:bg-accent/10 disabled:opacity-40"
+            >
+              <GitMerge size={14} className="shrink-0" />
+              Merge To…
             </button>
           </div>
         </div>

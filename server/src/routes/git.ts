@@ -15,7 +15,7 @@ router.use((req, res, next) => {
       res.status(400).json({ success: false, error: `${key} must be a boolean` }); return;
     }
   }
-  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'key', 'value', 'url', 'branchName', 'patch']) {
+  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'targetBranch', 'key', 'value', 'url', 'branchName', 'patch']) {
     if (req.body?.[key] !== undefined && typeof req.body[key] !== 'string') {
       res.status(400).json({ success: false, error: `${key} must be a string` }); return;
     }
@@ -329,6 +329,17 @@ router.post('/merge', asyncHandler(async (req: Request, res: Response) => {
     return;
   }
   const result = await withRepoLock(repoPath, () => gitService.mergeBranch(repoPath, sourceBranch));
+  res.json({ success: true, data: result });
+}));
+
+router.post('/merge-to', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { sourceBranch, targetBranch } = req.body;
+  if (!sourceBranch || !targetBranch) {
+    res.status(400).json({ success: false, error: 'sourceBranch and targetBranch required' });
+    return;
+  }
+  const result = await withRepoLock(repoPath, () => gitService.mergeToBranch(repoPath, sourceBranch, targetBranch));
   res.json({ success: true, data: result });
 }));
 

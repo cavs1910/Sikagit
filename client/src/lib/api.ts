@@ -116,6 +116,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo, sourceBranch }),
     }),
+  mergeToBranch: (repo: string, sourceBranch: string, targetBranch: string) =>
+    request<{ message: string; merged: boolean; conflicts?: string[] }>('/git/merge-to', {
+      method: 'POST',
+      body: JSON.stringify({ repo, sourceBranch, targetBranch }),
+    }),
   mergeAbort: (repo: string) =>
     request<void>('/git/merge/abort', {
       method: 'POST',

@@ -961,6 +961,42 @@ export async function mergeBranch(
   }
 }
 
+// Called under the repository mutex: validate and switch before merging so
+// another application request cannot change HEAD between those operations.
+export async function mergeToBranch(
+  repoPath: string,
+  sourceBranch: string,
+  targetBranch: string
+): Promise<{ message: string; merged: boolean; conflicts?: string[] }> {
+  safeRef(sourceBranch);
+  safeRef(targetBranch);
+  const git = getGit(repoPath);
+  const status = await git.status();
+  const localBranches = (await git.branchLocal()).all;
+  if (status.detached || status.current !== sourceBranch || !localBranches.includes(sourceBranch)) {
+    throw new Error('The active branch changed. Reopen Merge To and try again.');
+  }
+  if (targetBranch === sourceBranch || !localBranches.includes(targetBranch)) {
+    throw new Error('Choose another existing local destination branch.');
+  }
+  if (!status.isClean()) {
+    throw new Error('Commit or stash local changes before using Merge To.');
+  }
+  const merging = await git.raw(['rev-parse', '--verify', 'MERGE_HEAD']).then(() => true, () => false);
+  if (merging) throw new Error('Resolve or abort the existing merge first.');
+  await git.raw(['switch', '--no-guess', targetBranch]);
+  // Keep the destination checked out, including on conflicts or other merge
+  // failures. Never reset or silently discard changes to return to the source.
+  try {
+    const result = await mergeBranch(repoPath, `refs/heads/${sourceBranch}`);
+    return { ...result, message: result.merged
+      ? `Merged ${sourceBranch} into ${targetBranch}`
+      : `${result.message} on ${targetBranch}` };
+  } catch (err) {
+    throw new Error(`Merge failed on ${targetBranch}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+  }
+}
+
 export async function abortMerge(repoPath: string): Promise<void> {
   const git = getGit(repoPath);
   await git.merge(['--abort']);

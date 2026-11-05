@@ -507,3 +507,49 @@ test('repeated invalid form logins are bounded without blocking session checks o
  assert.equal((await fetch(base+'/api/v1/auth/session')).status,200);
  assert.equal((await request('/api/v1/health')).status,200);
 });
+
+function mergeToFixture(name) {
+ const folder=path.join(root,name);fs.mkdirSync(folder);
+ const run=(...args)=>execFileSync('/usr/bin/git',['-C',folder,...args],{encoding:'utf8'}).trim();
+ run('init','-q','-b','main');run('config','user.name','Fixture');run('config','user.email','fixture@example.invalid');
+ fs.writeFileSync(path.join(folder,'shared.txt'),'base\n');run('add','.');run('commit','-qm','base');
+ run('checkout','-qb','feature');fs.writeFileSync(path.join(folder,'feature.txt'),'feature\n');run('add','.');run('commit','-qm','feature');
+ return {folder,run};
+}
+test('Merge To integrates the active branch into a local destination and stays there, preserving the source',async()=>{
+ const {folder,run}=mergeToFixture('merge-to-success'),source=run('rev-parse','feature');
+ run('tag','feature','main'); // A same-name tag must never replace the source branch.
+ const response=await request('/api/v1/git/merge-to',{repo:folder,sourceBranch:'feature',targetBranch:'main'});
+ assert.equal(response.status,200);assert.equal((await response.json()).data.merged,true);
+ assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','HEAD'),source);assert.equal(run('rev-parse','refs/heads/feature'),source);
+ assert.equal(fs.readFileSync(path.join(folder,'feature.txt'),'utf8'),'feature\n');
+});
+test('Merge To rejects dirty, stale, detached, invalid and nonlocal requests before switching branches',async()=>{
+ const {folder,run}=mergeToFixture('merge-to-rejected'),head=run('rev-parse','HEAD');
+ const body={repo:folder,sourceBranch:'feature',targetBranch:'main'};
+ const unchanged=()=>{assert.equal(run('branch','--show-current'),'feature');assert.equal(run('rev-parse','HEAD'),head);};
+ for(const dirty of ['untracked','unstaged','staged']){
+  const filename=dirty==='untracked'?'new.txt':'shared.txt';fs.writeFileSync(path.join(folder,filename),'keep this work\n');if(dirty==='staged')run('add',filename);
+  assert.equal((await request('/api/v1/git/merge-to',body)).ok,false);unchanged();assert.equal(fs.readFileSync(path.join(folder,filename),'utf8'),'keep this work\n');
+  if(dirty==='untracked')fs.unlinkSync(path.join(folder,filename));else{run('reset','--',filename);run('checkout','--',filename);}
+ }
+ for(const fields of [{sourceBranch:'main'},{targetBranch:'feature'},{targetBranch:'origin/main'},{targetBranch:'--help'},{targetBranch:'main~1'},{targetBranch:'../main'},{targetBranch:42},{sourceBranch:['feature']},{targetBranch:''}]){
+  assert.equal((await request('/api/v1/git/merge-to',{...body,...fields})).ok,false);unchanged();
+ }
+ run('checkout','--detach',head);assert.equal((await request('/api/v1/git/merge-to',body)).ok,false);assert.equal(run('branch','--show-current'),'');assert.equal(run('rev-parse','HEAD'),head);
+});
+test('Merge To reports conflicts on the destination and abort preserves both branch tips',async()=>{
+ const {folder,run}=mergeToFixture('merge-to-conflict');
+ fs.writeFileSync(path.join(folder,'shared.txt'),'feature version\n');run('add','.');run('commit','-qm','feature conflict');const source=run('rev-parse','HEAD');
+ run('checkout','main');fs.writeFileSync(path.join(folder,'shared.txt'),'main version\n');run('add','.');run('commit','-qm','main conflict');const target=run('rev-parse','HEAD');run('checkout','feature');
+ const response=await request('/api/v1/git/merge-to',{repo:folder,sourceBranch:'feature',targetBranch:'main'});assert.equal(response.status,200);
+ const result=(await response.json()).data;assert.equal(result.merged,false);assert.deepEqual(result.conflicts,['shared.txt']);assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','MERGE_HEAD'),source);
+ assert.equal((await request('/api/v1/git/merge/abort',{repo:folder})).status,200);
+ assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','HEAD'),target);assert.equal(run('rev-parse','feature'),source);assert.equal(run('status','--porcelain'),'');
+});
+test('Merge To keeps the destination on a non-conflict merge failure without resetting either branch',async()=>{
+ const {folder,run}=mergeToFixture('merge-to-failure'),source=run('rev-parse','HEAD');
+ run('checkout','--orphan','unrelated');run('rm','-rf','.');fs.writeFileSync(path.join(folder,'other.txt'),'unrelated\n');run('add','.');run('commit','-qm','unrelated');const target=run('rev-parse','HEAD');run('checkout','feature');
+ const response=await request('/api/v1/git/merge-to',{repo:folder,sourceBranch:'feature',targetBranch:'unrelated'});assert.equal(response.ok,false);assert.match((await response.json()).error,/Merge failed on unrelated/);
+ assert.equal(run('branch','--show-current'),'unrelated');assert.equal(run('rev-parse','HEAD'),target);assert.equal(run('rev-parse','feature'),source);assert.equal(run('status','--porcelain'),'');
+});
