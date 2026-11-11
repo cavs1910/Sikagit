@@ -7,6 +7,15 @@ import { indentWithTab } from "@codemirror/commands";
 import type { Extension } from "@codemirror/state";
 import { useEditorStore } from "../../store/editorStore";
 import type { EditorDocument } from "../../store/editorStore";
+import { useUIStore } from "../../store/uiStore";
+import { EditorToolbar } from "./EditorToolbar";
+
+function appearance(fontSize: number, wordWrap: boolean): Extension {
+  return [
+    EditorView.theme({ ".cm-scroller": { fontSize: `${fontSize}px` } }),
+    wordWrap ? EditorView.lineWrapping : [],
+  ];
+}
 
 async function language(file: string): Promise<Extension> {
   const ext = file.split(".").pop()?.toLowerCase();
@@ -55,6 +64,9 @@ export default function CodeEditor({
     view = useRef<EditorView | null>(null),
     save = useRef(onSave);
   save.current = onSave;
+  const fontSize = useUIStore((s) => s.editorFontSize);
+  const wordWrap = useUIStore((s) => s.editorWordWrap);
+  const display = useRef(new Compartment());
   useEffect(() => {
     if (!parent.current) return;
     const syntax = new Compartment();
@@ -65,6 +77,10 @@ export default function CodeEditor({
         doc: doc.content,
         extensions: [
           basicSetup,
+          display.current.of(appearance(
+            useUIStore.getState().editorFontSize,
+            useUIStore.getState().editorWordWrap,
+          )),
           EditorState.lineSeparator.of(
             doc.lineEnding === "crlf" ? "\r\n" : "\n",
           ),
@@ -93,7 +109,6 @@ export default function CodeEditor({
               ".cm-scroller": {
                 overflow: "auto",
                 fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-                fontSize: "13px",
               },
               ".cm-gutters": {
                 backgroundColor: "var(--color-bg-secondary)",
@@ -144,5 +159,19 @@ export default function CodeEditor({
     };
     // Recreate on file/reload, preserving normal keystroke updates and undo history.
   }, [documentKey, doc.token]);
-  return <div ref={parent} className="flex-1 min-h-0 overflow-hidden" />;
+  useEffect(() => {
+    view.current?.dispatch({ effects: display.current.reconfigure(appearance(fontSize, wordWrap)) });
+  }, [fontSize, wordWrap]);
+  return (
+    <>
+      <EditorToolbar onCommand={(command) => {
+        const editor = view.current;
+        if (editor) {
+          editor.focus();
+          command(editor);
+        }
+      }} />
+      <div ref={parent} className="flex-1 min-h-0 overflow-hidden" />
+    </>
+  );
 }
