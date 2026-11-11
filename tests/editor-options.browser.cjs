@@ -55,8 +55,11 @@ const content = 'function fixture() {\n  return "' + 'long text '.repeat(45) + '
   assert.equal(await editor.innerText(), before);
   assert.equal(await editor.evaluate(e => getComputedStyle(e).whiteSpace), 'break-spaces');
   assert(await page.locator('.cm-scroller').evaluate(e => e.scrollWidth <= e.clientWidth + 1));
-  await action('Undo'); assert(!(await editor.innerText()).includes('draft'));
-  await action('Redo'); assert((await editor.innerText()).includes('draft'));
+  // Menu commands run after Radix closes and hands focus back to CodeMirror.
+  await action('Undo');
+  await page.waitForFunction(() => !document.querySelector('.cm-content').innerText.includes('draft'));
+  await action('Redo');
+  await page.waitForFunction(() => document.querySelector('.cm-content').innerText.includes('draft'));
   await page.getByRole('button', { name: 'Find and replace', exact: true }).click();
   const search = page.locator('.cm-search input[name="search"]'); await search.fill('return');
   assert(await search.evaluate(e => e === document.activeElement));
@@ -71,7 +74,7 @@ const content = 'function fixture() {\n  return "' + 'long text '.repeat(45) + '
   // Let the lazy JavaScript parser load before requesting folds.
   await page.locator('.cm-foldGutter [title="Fold line"]').first().waitFor();
   await action('Fold all'); await page.locator('.cm-foldPlaceholder').waitFor();
-  await action('Unfold all'); assert.equal(await page.locator('.cm-foldPlaceholder').count(), 0);
+  await action('Unfold all'); await page.locator('.cm-foldPlaceholder').waitFor({ state: 'hidden' });
   await openFile('other.txt'); assert.equal(await actualSize(), '24px'); assert.equal(await wrap.getAttribute('aria-pressed'), 'true');
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   assert.deepEqual(writes, []); assert.deepEqual(errors, []);
@@ -85,7 +88,8 @@ const content = 'function fixture() {\n  return "' + 'long text '.repeat(45) + '
   // Radix keyboard navigation and focus return on Escape.
   const menu = page.getByRole('button', { name: 'Editor actions', exact: true });
   await menu.focus(); await page.keyboard.press('Enter'); await page.getByRole('menu').waitFor();
-  await page.keyboard.press('Escape'); assert(await menu.evaluate(e => e === document.activeElement));
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Editor actions');
   console.log(`PASS ${width}px: text size, wrapping, draft/undo preservation, menu commands, focus, persistence and no writes`);
   await page.close();
  }} finally { await browser.close(); }
