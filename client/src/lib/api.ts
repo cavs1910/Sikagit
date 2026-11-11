@@ -136,12 +136,20 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ repo, branch, expectedCommit }),
     }),
+  previewRemoteBranchDeletion: (repo: string, branch: string, expectedCommit: string) =>
+    request<import('../../../shared/types/gitCommands').GitCommand[]>('/git/branch/delete-remote/preview', {
+      method: 'POST', body: JSON.stringify({ repo, branch, expectedCommit }),
+    }),
   previewBranchCleanup: (repo: string, baseRef?: string, includeLocal = true, includeRemote = false) =>
     request<import('@sikagit/shared').BranchCleanupPreview>('/git/branch/cleanup/preview', {
       method: 'POST', body: JSON.stringify({ repo, baseRef, includeLocal, includeRemote }),
     }),
   executeBranchCleanup: (repo: string, planId: string, refs: string[]) =>
     request<import('@sikagit/shared').BranchCleanupResult>('/git/branch/cleanup/execute', {
+      method: 'POST', body: JSON.stringify({ repo, planId, refs }),
+    }),
+  previewCleanupCommands: (repo: string, planId: string, refs: string[]) =>
+    request<import('../../../shared/types/gitCommands').GitCommand[]>('/git/branch/cleanup/commands', {
       method: 'POST', body: JSON.stringify({ repo, planId, refs }),
     }),
   getTags: (repo: string) => request<import('@sikagit/shared').GitTag[]>(`/git/tags?repo=${encodeURIComponent(repo)}`),

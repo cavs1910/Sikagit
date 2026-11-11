@@ -175,3 +175,48 @@ checks pass at 320, 390 and 1280 px with API/Git mutations mocked. The merge
 checks also cover keyboard switches, compact footer geometry and a 350 px
 viewport. Backend TypeScript and Vite compile; strict frontend TypeScript keeps
 the same 35 baseline diagnostics.
+
+## Optional Git command review
+
+**Show Git commands** is a collapsed-by-default disclosure in Merge, Merge To,
+local/remote branch deletion and merged-branch cleanup. The shared
+`GitCommandPreview` uses native details/summary so reviewing operations adds
+space only when requested. Long commands wrap and scroll inside the dialog.
+Opening the disclosure, using Enter on its summary, retrying a preview, or
+changing an option never confirms the merge or deletion.
+
+Merge previews update immediately with the selected branch, `--ff`/`--no-ff`,
+and optional source deletion. Merge To shows the preceding
+`git switch --no-guess`; source deletion is labelled as conditional on a
+successful merge. After conflicts, the preview changes to `git merge --abort`,
+matching the available action. Local deletion switches between `-d` and `-D`
+with the force option.
+
+Remote previews load only when expanded. The authenticated, Origin-protected
+`POST /git/branch/delete-remote/preview` resolves the validated push URL, full
+last-fetched commit and target ref from local Git data, showing the push lease
+and conditional tracking-ref update. `POST /git/branch/cleanup/commands` uses
+the existing repository-bound, expiring cleanup plan and selected refs. It
+keeps the selection order, includes only selected branches and does not consume
+the plan. These endpoints do not contact remotes or change files, HEAD, index
+or refs. Unsafe URLs (including credentials), aliases and invalid selections
+are refused. Failed loads offer a read-only retry.
+
+The main operation argument arrays come from `shared/types/gitCommands.ts`,
+which is also used by server execution. The UI displays safely quoted text
+and labels conditional steps. Internal validation/probe commands and the
+Git wrapper's global safety options are omitted, as stated in the disclosure.
+The displayed text is never executed or submitted as a shell command. Execution
+still revalidates current state; opening a preview does not reserve Git state
+or guarantee a later operation will succeed.
+
+Validation on 2026-11-11: all 75 production-image security cases pass. New cases
+verify exact push argument parity, full leases with slash-named remotes, remote
+previews while the disposable server is unavailable, unchanged local/server
+refs and index, invalid targets without credential disclosure, authentication
+and Origin protection, and selected cleanup commands without consuming the
+plan. The browser merge/deletion/cleanup checks pass at 320, 390 and 1280 px,
+including keyboard review, dynamic options, conditional deletion, conflict
+abort, preview retry and zero mutation before explicit confirmation. Backend
+TypeScript and Vite compile; strict frontend TypeScript keeps the identical
+35 baseline diagnostics.

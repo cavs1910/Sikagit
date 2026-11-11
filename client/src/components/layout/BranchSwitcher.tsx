@@ -8,6 +8,7 @@ import { useConfirmStore } from '../../store/confirmStore';
 import { BranchCleanupDialog } from '../operations/BranchCleanupDialog';
 import { cn } from '../../lib/utils';
 import type { GitBranch as GitBranchType } from '@sikagit/shared';
+import { deleteLocalBranchCommand } from '../../../../shared/types/gitCommands';
 
 const emptyBranches: GitBranchType[] = [];
 
@@ -97,6 +98,8 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
         confirmLabel: b.isRemote ? 'Delete remote branch' : 'Delete local branch',
         variant: 'danger',
         checkbox: b.isRemote ? undefined : { label: 'Force delete, even with unmerged commits', defaultChecked: false },
+        gitCommands: b.isRemote ? undefined : (force) => [{ args: deleteLocalBranchCommand(b.name, force) }],
+        loadGitCommands: b.isRemote ? () => api.previewRemoteBranchDeletion(repoPath, b.name, b.commit) : undefined,
       });
       if (!result.confirmed) return;
       if (b.isRemote) {

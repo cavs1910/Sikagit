@@ -1,4 +1,6 @@
 import { simpleGit, SimpleGit } from 'simple-git';
+import { mergeCommand, switchForMergeCommand, deleteLocalBranchCommand, deleteRemoteBranchCommands, abortMergeCommand } from '../../../shared/types/gitCommands';
+import type { GitCommand } from '../../../shared/types/gitCommands';
 import { execFileSync } from 'child_process';
 import { confinedFile, safeFiles, safeRevision, safeRef, safeRemote } from '../security';
 import { readFileSync, readdirSync, existsSync, statSync, unlinkSync } from 'fs';
@@ -943,7 +945,7 @@ export async function mergeBranch(
   const currentBranch = status.current || 'HEAD';
 
   try {
-    await git.merge([...(fastForward === undefined ? [] : [fastForward ? '--ff' : '--no-ff']), sourceBranch]);
+    await git.merge(mergeCommand(sourceBranch, fastForward).slice(1));
     return {
       merged: true,
       message: `Merged ${sourceBranch} into ${currentBranch}`,
@@ -986,7 +988,7 @@ export async function mergeToBranch(
   }
   const merging = await git.raw(['rev-parse', '--verify', 'MERGE_HEAD']).then(() => true, () => false);
   if (merging) throw new Error('Resolve or abort the existing merge first.');
-  await git.raw(['switch', '--no-guess', targetBranch]);
+  await git.raw(switchForMergeCommand(targetBranch));
   // Keep the destination checked out, including on conflicts or other merge
   // failures. Never reset or silently discard changes to return to the source.
   try {
@@ -1001,7 +1003,7 @@ export async function mergeToBranch(
 
 export async function abortMerge(repoPath: string): Promise<void> {
   const git = getGit(repoPath);
-  await git.merge(['--abort']);
+  await git.merge(abortMergeCommand().slice(1));
 }
 
 async function checkedBranchTip(git: SimpleGit, ref: string, expectedCommit?: string): Promise<string> {
@@ -1022,7 +1024,7 @@ export async function deleteBranch(repoPath: string, branchName: string, force =
   await checkedBranchTip(git, `refs/heads/${branchName}`, expectedCommit);
   const active = await git.raw(['symbolic-ref', '--quiet', 'HEAD']).then(s => s.trim(), () => '');
   if (active === `refs/heads/${branchName}`) throw new Error('Cannot delete the active branch. Switch to another branch first.');
-  await git.branch([force ? '-D' : '-d', '--', branchName]);
+  await git.branch(deleteLocalBranchCommand(branchName, force).slice(1));
 }
 
 async function prepareRemoteDeletion(git: SimpleGit, remoteBranch: string, expectedCommit: string) {
@@ -1060,20 +1062,26 @@ export async function verifyRemoteBranchTip(repoPath: string, branch: string, ex
 export async function deleteRemoteBranch(repoPath: string, remoteBranch: string, expectedCommit: string): Promise<{ message: string }> {
   const git = getGit(repoPath, { network: true });
   const { label, target, tracking, tip, url } = await prepareRemoteDeletion(git, remoteBranch, expectedCommit);
+  const commands = deleteRemoteBranchCommands(target, tracking, tip, url);
   // Use the validated URL to avoid remote mirror/refspec configuration. Only
   // this branch is sent, and the server must still have the last-fetched tip.
   try {
-    await git.push(['--porcelain', '--progress', '--no-follow-tags', '--recurse-submodules=no', '--no-signed',
-      `--force-with-lease=${target}:${tip}`, url, `:${target}`]);
+    await git.push(commands[0].args.slice(1));
   } catch (err) {
     const text = err instanceof Error ? err.message : '';
     if (/stale info|force-with-lease/i.test(text)) throw new Error('The remote branch changed since the last Fetch. Fetch and review it before deleting.');
     throw describeNetworkError(err, 'Delete remote branch');
   }
   // Do not remove a tracking ref that an external fetch updated meanwhile.
-  try { await git.raw(['update-ref', '-d', tracking, tip]); }
+  try { await git.raw(commands[1].args); }
   catch { return { message: `Deleted ${label} on the server. Fetch to refresh its changed tracking reference.` }; }
   return { message: `Deleted remote branch ${label}. Local branches were kept.` };
+}
+
+// Local inspection only: no ls-remote, push or reference changes while reviewing.
+export async function previewRemoteBranchDeletion(repoPath: string, branch: string, expectedCommit: string): Promise<GitCommand[]> {
+  const { target, tracking, tip, url } = await prepareRemoteDeletion(getGit(repoPath), branch, expectedCommit);
+  return deleteRemoteBranchCommands(target, tracking, tip, url);
 }
 
 export async function checkoutCommit(repoPath: string, commitHash: string): Promise<{ branch: string }> {

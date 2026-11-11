@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import type { BranchCleanupBase, BranchCleanupCandidate, BranchCleanupPreview, BranchCleanupResult } from '@sikagit/shared';
-import { safeRef } from '../security';
+import { safeRef, safeRemote } from '../security';
+import { deleteLocalBranchCommand, deleteRemoteBranchCommands } from '../../../shared/types/gitCommands';
+import type { GitCommand } from '../../../shared/types/gitCommands';
 import { getGit, deleteBranch, deleteRemoteBranch, verifyRemoteBranchTip } from './gitService';
 
 const LIMIT = 200;
@@ -63,7 +65,7 @@ export async function previewBranchCleanup(repo: string, options: Options): Prom
   return { planId, expiresAt, base: state.base, bases: state.bases, candidates, totalCandidates: state.candidates.length, limit: LIMIT };
 }
 
-export async function executeBranchCleanup(repo: string, planId: string, selected: unknown): Promise<BranchCleanupResult> {
+function cleanupSelection(repo: string, planId: string, selected: unknown) {
   const plan = plans.get(planId);
   if (!plan || plan.repo !== repo || plan.expiresAt <= Date.now()) throw new Error('Cleanup preview expired. Generate a new preview.');
   if (!Array.isArray(selected) || !selected.length || selected.length > LIMIT || selected.some(r => typeof r !== 'string') || new Set(selected).size !== selected.length) {
@@ -72,6 +74,33 @@ export async function executeBranchCleanup(repo: string, planId: string, selecte
   const wanted = selected.map(ref => plan.candidates.find(c => c.ref === ref));
   if (wanted.some(c => !c)) throw new Error('Select only branches from this cleanup preview.');
   const candidates = wanted as BranchCleanupCandidate[];
+  return { plan, candidates };
+}
+
+// Uses only the saved selection and local remote configuration; never contacts
+// the remote, consumes the plan, or changes refs while displaying commands.
+export async function previewCleanupCommands(repo: string, planId: string, selected: unknown): Promise<GitCommand[]> {
+  const { plan, candidates } = cleanupSelection(repo, planId, selected);
+  const remote = plan.base.isRemote ? plan.base.ref.slice('refs/remotes/'.length).replace(/\/(main|master)$/, '') : '';
+  let url = '';
+  if (candidates.some(branch => branch.isRemote)) {
+    safeRef(remote);
+    const urls = (await getGit(repo).raw(['remote', 'get-url', '--push', '--all', remote])).trim().split('\n');
+    if (urls.length !== 1) throw new Error('Remote deletion requires exactly one push URL.');
+    safeRemote(urls[0]);
+    url = urls[0];
+  }
+  return candidates.flatMap(branch => {
+    if (!branch.isRemote) return [{ args: deleteLocalBranchCommand(branch.name) }];
+    const prefix = `refs/remotes/${remote}/`;
+    if (!branch.ref.startsWith(prefix)) throw new Error('Generate a new cleanup preview.');
+    const target = `refs/heads/${branch.ref.slice(prefix.length)}`;
+    return deleteRemoteBranchCommands(target, branch.ref, branch.commit, url);
+  });
+}
+
+export async function executeBranchCleanup(repo: string, planId: string, selected: unknown): Promise<BranchCleanupResult> {
+  const { plan, candidates } = cleanupSelection(repo, planId, selected);
   const fresh = await inspect(repo, plan.options);
   if (fresh.base.commit !== plan.base.commit || candidates.some(c => !fresh.candidates.some(f => f.ref === c.ref && f.commit === c.commit))) {
     throw new Error('The base, selected branches or checked-out branches changed. Generate a new cleanup preview. Nothing was deleted.');

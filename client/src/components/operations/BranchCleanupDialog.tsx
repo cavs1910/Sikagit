@@ -1,5 +1,6 @@
 import { Switch } from '../ui/Switch';
-import { useEffect, useState } from 'react';
+import { GitCommandPreview } from '../ui/GitCommandPreview';
+import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Trash2, X } from 'lucide-react';
 import type { BranchCleanupPreview, BranchCleanupResult } from '@sikagit/shared';
@@ -22,6 +23,9 @@ export function BranchCleanupDialog({ repoPath, onClose }: { repoPath: string; o
   const [result, setResult] = useState<BranchCleanupResult>();
   const [refresh, setRefresh] = useState(0);
   const confirm = useConfirmStore(s => s.confirm);
+  const commandLoader = useCallback(() => preview
+    ? api.previewCleanupCommands(repoPath, preview.planId, [...selected])
+    : Promise.resolve([]), [repoPath, preview, selected]);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,6 +49,7 @@ export function BranchCleanupDialog({ repoPath, onClose }: { repoPath: string; o
         title: 'Delete merged branches?',
         message: `Delete ${selected.size} selected branches already merged into ${label(preview.base.name)}?\n\nRemote entries will be deleted from the server. Main/master and checked-out branches are protected. Review the selected list before confirming.`,
         confirmLabel: 'Delete selected branches', variant: 'danger',
+        loadGitCommands: commandLoader,
       }))) return;
       setError('');
       try {
@@ -99,6 +104,7 @@ export function BranchCleanupDialog({ repoPath, onClose }: { repoPath: string; o
                 <span className="min-w-0 break-all"><span className="text-text-muted">{branch.isRemote ? 'Remote' : 'Local'} · </span>{label(branch.name)}</span>
               </label>)}
             </div>
+            {selected.size > 0 && <GitCommandPreview loadCommands={commandLoader} />}
           </>}
           {result && <div role="status" className="space-y-2">
             <p>{result.results.filter(r => r.status === 'deleted').length} deleted · {result.results.filter(r => r.status === 'failed').length} failed · {result.results.filter(r => r.status === 'skipped').length} skipped</p>

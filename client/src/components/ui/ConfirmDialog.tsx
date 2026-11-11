@@ -1,4 +1,5 @@
 import { Switch } from './Switch';
+import { GitCommandPreview } from './GitCommandPreview';
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import { useConfirmStore } from '../../store/confirmStore';
@@ -23,7 +24,7 @@ export function ConfirmDialog() {
       if (e.key === 'Escape') handleCancel();
       // Native controls handle Enter themselves. In particular, toggling a
       // switch or activating Cancel must never also confirm the operation.
-      if (e.key === 'Enter' && !(e.target instanceof Element && e.target.closest('button, input, select, textarea, a'))) {
+      if (e.key === 'Enter' && !e.defaultPrevented && !(e.target instanceof Element && e.target.closest('button, input, select, textarea, a, summary'))) {
         handleConfirm(options.checkbox ? checkboxChecked : undefined);
       }
     };
@@ -73,6 +74,11 @@ export function ConfirmDialog() {
             <Switch label={checkbox.label} checked={checkboxChecked} onChange={setCheckboxChecked} className="w-full" />
           </div>
         )}
+        {(options.gitCommands || options.loadGitCommands) && <div className="px-4 py-2">
+          <GitCommandPreview key={options.title + options.message}
+            commands={typeof options.gitCommands === 'function' ? options.gitCommands(checkboxChecked) : options.gitCommands}
+            loadCommands={options.loadGitCommands} />
+        </div>}
         <div className="flex justify-end gap-2 px-4 py-3">
           <button
             onClick={handleCancel}

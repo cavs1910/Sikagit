@@ -28,7 +28,7 @@ Este archivo permite trabajar sin el chat original. Leelo antes de cambiar el pr
 
 - Estado por repo: cachés en memoria separadas por ruta (hasta 8 repos, historial hasta 1.000 commits), selección sincronizada y respuestas tardías aisladas. Switch de ignorados junto a Files; cabecera móvil con repo/rama/settings; quitar bookmark dentro de Settings. Ver `docs/MOBILE_LAYOUT.md` y `docs/REMOTE_STATUS.md`.
 
-- Ramas: el selector incluye **Merge…** (otra rama → actual) y **Merge To…** (actual → destino local). Ambos diálogos incluyen **Allow fast-forward** (activo por defecto): usa `--ff` y, al desactivarlo, `--no-ff`; no es FF-only. **Delete source branch after merge** usa el switch común y sigue apagado por defecto. Merge To exige un árbol limpio, valida la rama activa y cambia/fusiona bajo el mutex. Permanece en destino al terminar o abortar; no hace push. La papelera por rama permite borrar locales (force explícito) y remotas con lease contra el último Fetch, conservando sus contrapartes. **Clean up merged branches…** ofrece vista previa por ascendencia contra main/master, selección local/remota, planes ligados a commits y resultados por rama; nunca fuerza el borrado y omite squash/cherry-picks sin ascendencia. Ver `docs/MOBILE_LAYOUT.md`.
+- Ramas: el selector incluye **Merge…** (otra rama → actual) y **Merge To…** (actual → destino local). Ambos diálogos incluyen **Allow fast-forward** (activo por defecto): usa `--ff` y, al desactivarlo, `--no-ff`; no es FF-only. **Delete source branch after merge** usa el switch común y sigue apagado por defecto. Merge To exige un árbol limpio, valida la rama activa y cambia/fusiona bajo el mutex. Permanece en destino al terminar o abortar; no hace push. **Show Git commands** despliega opcionalmente las operaciones de merge, abort y borrado (incluye FF/force y borrado condicional); los remotos y la limpieza se consultan sin red ni mutaciones. La papelera por rama permite borrar locales (force explícito) y remotas con lease contra el último Fetch, conservando sus contrapartes. **Clean up merged branches…** ofrece vista previa por ascendencia contra main/master, selección local/remota, planes ligados a commits y resultados por rama; nunca fuerza el borrado y omite squash/cherry-picks sin ascendencia. Ver `docs/MOBILE_LAYOUT.md`.
 
 - Publicación: indicador de rama junto a Push y nubes por commit, basados en referencias remotas locales (último Fetch), sin consultas de red por fila. Ver `docs/REMOTE_STATUS.md`.
 
@@ -40,6 +40,7 @@ Este archivo permite trabajar sin el chat original. Leelo antes de cambiar el pr
 
 - Antes de crear un componente o dibujar un control nuevo, buscar primero en `client/src/components/ui/` y en las pantallas existentes. Priorizar siempre reutilizar y extender la UI actual y las primitivas Radix ya instaladas; no crear duplicados de componentes, estilos o comportamientos que ya tenemos.
 - Para opciones booleanas en barras, Settings y diálogos, usar **`client/src/components/ui/Switch.tsx`** (`Switch`), el mismo control de Show Git-ignored files y Show reflog. Incluye label, descripción opcional, label corto móvil, disabled, foco de teclado y semántica `role="switch"`. No volver a dibujar switches con divs/estilos inline ni crear otro ToolbarSwitch o un toggle particular por pantalla.
+- Para la vista opcional de comandos Git, reutilizar `client/src/components/ui/GitCommandPreview.tsx` y los constructores de argumentos en `shared/types/gitCommands.ts`, compartidos con la ejecución. No construir comandos ejecutables desde el texto mostrado ni exponer credenciales.
 - Conservar checkboxes para selección múltiple de archivos, ramas, proyectos/repos y estados indeterminados. Dentro de menús Radix, reutilizar sus primitivas existentes (por ejemplo CheckboxItem) para respetar la navegación del menú.
 
 ## Límites de seguridad que deben conservarse
@@ -66,7 +67,7 @@ Leé `docs/SECURITY_REVIEW.md` antes de cambiar Git, autenticación, rutas o Doc
    sg docker -c 'sh scripts/test-security.sh'
    ```
 
-   La última ejecución de referencia pasó **71 pruebas**. Backend TypeScript y Vite compilan. El chequeo estricto del frontend conserva **35 diagnósticos preexistentes**: no declarar que pasa ni confundirlos con regresiones. Comparar contra la base si cambian.
+   La última ejecución de referencia pasó **75 pruebas**. Backend TypeScript y Vite compilan. El chequeo estricto del frontend conserva **35 diagnósticos preexistentes**: no declarar que pasa ni confundirlos con regresiones. Comparar contra la base si cambian.
 5. Para UI, probar el recorrido en navegador; para escrituras o AI usar fixtures desechables, no datos reales ni llamadas pagas. Para cambios de dependencias/seguridad, revisar npm audit y los escaneos apropiados. Los reportes privados están fuera del source.
 6. Para un despliegue de cambios de aplicación solicitado: respaldar SQLite mediante su API de backup (no copiar sólo el `.db` activo), conservar la imagen previa y reconstruir desde el Compose privado:
 

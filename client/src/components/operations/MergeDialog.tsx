@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { X, GitMerge, Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
 import { Switch } from '../ui/Switch';
+import { GitCommandPreview } from '../ui/GitCommandPreview';
+import { mergeCommand, switchForMergeCommand, deleteLocalBranchCommand, abortMergeCommand } from '../../../../shared/types/gitCommands';
+import type { GitCommand } from '../../../../shared/types/gitCommands';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useToastStore } from '../../store/toastStore';
@@ -88,6 +91,11 @@ export function MergeDialog({ repoPath, preselectedBranch, mode = 'from', onClos
 
   const busy = merging || aborting;
   const closeDialog = () => { if (!busy) onClose(); };
+  const commands: GitCommand[] = conflicts ? [{ args: abortMergeCommand() }] : selectedBranch ? [
+    ...(mergeTo ? [{ args: switchForMergeCommand(targetBranch) }] : []),
+    { args: mergeCommand(mergeTo ? `refs/heads/${sourceBranch}` : sourceBranch, fastForward) },
+    ...(deleteBranchAfter ? [{ args: deleteLocalBranchCommand(sourceBranch), condition: 'Only after a successful merge.' }] : []),
+  ] : [];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={closeDialog}>
@@ -182,6 +190,8 @@ export function MergeDialog({ repoPath, preselectedBranch, mode = 'from', onClos
               disabled={busy || conflicts !== null} className="w-full"
               description="Delete the local source branch only after a successful merge. Remote branches are kept." />
           </div>
+
+          <GitCommandPreview commands={commands} />
 
           {/* Error */}
           {error && (

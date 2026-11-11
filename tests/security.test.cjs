@@ -740,3 +740,55 @@ test('merge endpoints reject non-boolean fast-forward options before touching br
   assert.equal(run('branch','--show-current'),'feature');assert.equal(run('rev-parse','HEAD'),source);assert.equal(run('rev-parse','main'),target);assert.equal(run('status','--porcelain'),'');
  }
 });
+
+test('remote command preview resolves full leases and slash-named remotes without contacting or changing the remote',async()=>{
+ const {folder,run,server,remove,tip,log,url}=remoteDeleteFixture('command-remote','team/origin');
+ const transport=JSON.parse(fs.readFileSync(process.env.SIKAGIT_TEST_REMOTE_FIXTURE,'utf8'));
+ const before=run('for-each-ref','--format=%(refname) %(objectname)'),head=run('rev-parse','HEAD'),tree=run('write-tree');
+ fs.renameSync(transport.bare,transport.bare+'.offline');
+ let commands;
+ try {
+  const response=await request('/api/v1/git/branch/delete-remote/preview',{repo:folder,branch:'remotes/team/origin/old/topic',expectedCommit:tip.slice(0,7)});
+  assert.equal(response.status,200);commands=(await response.json()).data;
+ } finally { fs.renameSync(transport.bare+'.offline',transport.bare); }
+ assert.equal(commands.length,2);assert(commands[0].args.includes(url));assert(commands[0].args.includes('--force-with-lease=refs/heads/old/topic:'+tip));
+ assert.deepEqual(commands[1].args,['update-ref','-d','refs/remotes/team/origin/old/topic',tip]);
+ assert.equal(fs.existsSync(log),false);assert.equal(run('for-each-ref','--format=%(refname) %(objectname)'),before);assert.equal(run('rev-parse','HEAD'),head);assert.equal(run('write-tree'),tree);assert.equal(server('rev-parse','old/topic'),tip);
+ assert.equal((await remove()).status,200);
+ const actual=JSON.parse(fs.readFileSync(log,'utf8').trim());assert.deepEqual(actual.slice(actual.indexOf('push')),commands[0].args);
+});
+test('remote command preview refuses unsafe URLs, stale refs, aliases and force flags without leaking credentials',async()=>{
+ const {folder,run,tip,log}=remoteDeleteFixture('command-remote-reject');
+ const body={repo:folder,branch:'remotes/origin/old/topic',expectedCommit:tip};
+ for(const fields of [{expectedCommit:run('rev-parse','main')},{expectedCommit:[]},{branch:'../main'},{branch:'--help'},{force:true}]){
+  assert.equal((await request('/api/v1/git/branch/delete-remote/preview',{...body,...fields})).status,400);
+ }
+ run('symbolic-ref','refs/remotes/origin/HEAD','refs/remotes/origin/old/topic');assert.equal((await request('/api/v1/git/branch/delete-remote/preview',{...body,branch:'remotes/origin/HEAD'})).status,400);
+ run('config','remote.origin.pushurl','https://private-user:private-preview-token@github.com/fixture/repo.git');
+ const rejected=await request('/api/v1/git/branch/delete-remote/preview',body);assert.equal(rejected.status,400);assert.equal((await rejected.text()).includes('private-preview-token'),false);
+ assert.equal(fs.existsSync(log),false);assert.equal(run('rev-parse','refs/remotes/origin/old/topic'),tip);
+});
+test('cleanup command preview covers only selected branches and does not consume the executable plan',async()=>{
+ const {folder,run,server,tip,log,url}=remoteDeleteFixture('command-cleanup','team/origin');run('merge','--ff-only','feature');server('update-ref','refs/heads/main',tip);run('update-ref','refs/remotes/team/origin/main',tip);
+ const plan=await cleanupPreview(folder,{baseRef:'refs/remotes/team/origin/main',includeLocal:true,includeRemote:true});
+ const refs=['refs/heads/old/topic','refs/remotes/team/origin/old/topic'],before=run('for-each-ref','--format=%(refname) %(objectname)');
+ for(let i=0;i<2;i++){
+  const response=await request('/api/v1/git/branch/cleanup/commands',{repo:folder,planId:plan.planId,refs});assert.equal(response.status,200);
+  const commands=(await response.json()).data;assert.equal(commands.length,3);assert.deepEqual(commands[0].args,['branch','-d','--','old/topic']);
+  assert(commands[1].args.includes(url));assert(commands[1].args.includes('--force-with-lease=refs/heads/old/topic:'+tip));assert(commands[1].args.includes(':refs/heads/old/topic'));
+  assert.equal(commands.some(c=>c.args.includes('-D')),false);assert.equal(fs.existsSync(log),false);assert.equal(run('for-each-ref','--format=%(refname) %(objectname)'),before);
+ }
+ assert.equal((await cleanupExecute(folder,plan,refs)).status,200);assert.equal(run('rev-parse','feature'),tip);
+ assert.equal((await request('/api/v1/git/branch/cleanup/commands',{repo:folder,planId:plan.planId,refs})).status,400);
+});
+test('command preview routes require authentication and a valid repository-bound cleanup selection',async()=>{
+ const {folder,run}=mergeToFixture('command-preview-guards');run('checkout','main');run('merge','--ff-only','feature');const plan=await cleanupPreview(folder);
+ const other=mergeToFixture('command-preview-other');
+ for(const refs of [[],['refs/heads/main'],['refs/heads/feature','refs/heads/feature'],[{}]])assert.equal((await request('/api/v1/git/branch/cleanup/commands',{repo:folder,planId:plan.planId,refs})).status,400);
+ assert.equal((await request('/api/v1/git/branch/cleanup/commands',{repo:other.folder,planId:plan.planId,refs:['refs/heads/feature']})).status,400);
+ for(const route of ['/branch/cleanup/commands','/branch/delete-remote/preview']){
+  const response=await fetch(base+'/api/v1/git'+route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({repo:folder})});assert.equal(response.status,401);
+  assert.equal((await request('/api/v1/git'+route,{repo:folder},{Origin:'https://foreign.invalid'})).status,403);
+ }
+ assert(run('rev-parse','feature'));
+});

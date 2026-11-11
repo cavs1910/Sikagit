@@ -2,7 +2,7 @@ import { confinedFile, safeRevision } from '../security';
 import { Router, Request, Response, NextFunction } from 'express';
 import { validateRepoPath } from '../middleware/validatePath';
 import * as gitService from '../services/gitService';
-import { previewBranchCleanup, executeBranchCleanup } from '../services/branchCleanup';
+import { previewBranchCleanup, executeBranchCleanup, previewCleanupCommands } from '../services/branchCleanup';
 import { withRepoLock } from '../services/gitService';
 import { computeGraph } from '../services/graphService';
 import * as db from '../services/db';
@@ -365,6 +365,16 @@ router.post('/branch/cleanup/preview', asyncHandler(async (req: Request, res: Re
   res.json({ success: true, data: result });
 }));
 
+router.post('/branch/cleanup/commands', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  try {
+    const result = await withRepoLock(repoPath, () => previewCleanupCommands(repoPath, req.body.planId, req.body.refs));
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Could not preview cleanup commands' });
+  }
+}));
+
 router.post('/branch/cleanup/execute', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
   if (!req.body.planId || req.body.force !== undefined) {
@@ -384,6 +394,21 @@ router.post('/branch/delete', asyncHandler(async (req: Request, res: Response) =
   }
   await withRepoLock(repoPath, () => gitService.deleteBranch(repoPath, branch, force, expectedCommit));
   res.json({ success: true });
+}));
+
+router.post('/branch/delete-remote/preview', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { branch, expectedCommit } = req.body;
+  if (!branch || !expectedCommit || req.body.force !== undefined) {
+    res.status(400).json({ success: false, error: 'branch and expectedCommit required; remote deletion cannot be forced' });
+    return;
+  }
+  try {
+    const result = await withRepoLock(repoPath, () => gitService.previewRemoteBranchDeletion(repoPath, branch, expectedCommit));
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Could not preview remote deletion' });
+  }
 }));
 
 router.post('/branch/delete-remote', asyncHandler(async (req: Request, res: Response) => {

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { GitCommand } from '../../../shared/types/gitCommands';
 
 interface ConfirmCheckbox {
   label: string;
@@ -12,6 +13,8 @@ interface ConfirmOptions {
   cancelLabel?: string;
   variant?: 'danger' | 'warning' | 'info';
   checkbox?: ConfirmCheckbox;
+  gitCommands?: GitCommand[] | ((checked: boolean) => GitCommand[]);
+  loadGitCommands?: () => Promise<GitCommand[]>;
 }
 
 interface ConfirmResult {
