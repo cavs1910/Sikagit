@@ -1,3 +1,4 @@
+import { Switch } from '../ui/Switch';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Loader2, Trash2, X } from 'lucide-react';
@@ -80,8 +81,8 @@ export function BranchCleanupDialog({ repoPath, onClose }: { repoPath: string; o
             </select>
           </label>}
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2"><input type="checkbox" checked={includeLocal} disabled={controlsDisabled || !!result || (!includeRemote && includeLocal)} onChange={e => { reloadPreview(); setIncludeLocal(e.target.checked); }} />Local branches</label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={includeRemote} disabled={controlsDisabled || !!result || !baseIsRemote || (!includeLocal && includeRemote)} onChange={e => { reloadPreview(); setIncludeRemote(e.target.checked); }} />Remote branches on this remote</label>
+            <Switch label="Local branches" checked={includeLocal} disabled={controlsDisabled || !!result || (!includeRemote && includeLocal)} onChange={(value) => { reloadPreview(); setIncludeLocal(value); }} />
+            <Switch label="Remote branches on this remote" checked={includeRemote} disabled={controlsDisabled || !!result || !baseIsRemote || (!includeLocal && includeRemote)} onChange={(value) => { reloadPreview(); setIncludeRemote(value); }} />
           </div>
           <p className="text-text-muted">For remote cleanup, choose a remote main/master and Fetch first. Other remotes are kept. Main, master and branches in use are preserved. Cleanup never forces deletion.</p>
           {loading && <p role="status" className="flex items-center gap-2"><Loader2 size={16} className="animate-spin" />Checking merged branches…</p>}

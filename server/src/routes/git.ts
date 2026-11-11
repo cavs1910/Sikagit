@@ -324,23 +324,31 @@ router.post('/switch-branch', asyncHandler(async (req: Request, res: Response) =
 
 router.post('/merge', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const { sourceBranch } = req.body;
+  const { sourceBranch, fastForward } = req.body;
+  if (fastForward !== undefined && typeof fastForward !== 'boolean') {
+    res.status(400).json({ success: false, error: 'fastForward must be a boolean' });
+    return;
+  }
   if (!sourceBranch) {
     res.status(400).json({ success: false, error: 'Missing required field: sourceBranch' });
     return;
   }
-  const result = await withRepoLock(repoPath, () => gitService.mergeBranch(repoPath, sourceBranch));
+  const result = await withRepoLock(repoPath, () => gitService.mergeBranch(repoPath, sourceBranch, fastForward ?? true));
   res.json({ success: true, data: result });
 }));
 
 router.post('/merge-to', asyncHandler(async (req: Request, res: Response) => {
   const repoPath = (req as any).repoPath;
-  const { sourceBranch, targetBranch } = req.body;
+  const { sourceBranch, targetBranch, fastForward } = req.body;
+  if (fastForward !== undefined && typeof fastForward !== 'boolean') {
+    res.status(400).json({ success: false, error: 'fastForward must be a boolean' });
+    return;
+  }
   if (!sourceBranch || !targetBranch) {
     res.status(400).json({ success: false, error: 'sourceBranch and targetBranch required' });
     return;
   }
-  const result = await withRepoLock(repoPath, () => gitService.mergeToBranch(repoPath, sourceBranch, targetBranch));
+  const result = await withRepoLock(repoPath, () => gitService.mergeToBranch(repoPath, sourceBranch, targetBranch, fastForward ?? true));
   res.json({ success: true, data: result });
 }));
 

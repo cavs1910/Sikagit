@@ -15,7 +15,7 @@ import { FileDiffPanel } from '../diff/FileDiffPanel';
 import { FileStatusPanel } from '../files/FileStatusPanel';
 import { ResizeHandle } from '../ui/ResizeHandle';
 import { RepositoryHeader } from './RepositoryHeader';
-import { ToolbarSwitch } from '../ui/ToolbarSwitch';
+import { Switch } from '../ui/Switch';
 import { GitBranch, FolderKanban, ChevronRight, ArrowUp, ArrowDown, RefreshCw, Loader2 } from 'lucide-react';
 import { MergeDialog } from '../operations/MergeDialog';
 import { useProjectStore } from '../../store/projectStore';
@@ -377,8 +377,8 @@ export function MainContent() {
           <button role="tab" aria-selected={workspaceTab==='files'} onClick={()=>{setFilesOpened(true);setWorkspaceTab('files');}} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='files'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>Files</button>
         </div>
         {workspaceTab === 'git'
-          ? <ToolbarSwitch label="Show reflog" shortLabel="Reflog" title="Include commits recoverable from the reflog" checked={showReflog} onChange={setShowReflog} />
-          : <ToolbarSwitch label="Show Git-ignored files" shortLabel="Ignored" title="Include files ignored by Git" checked={showIgnoredFiles} onChange={setShowIgnoredFiles} />}
+          ? <Switch label="Show reflog" shortLabel="Reflog" title="Include commits recoverable from the reflog" checked={showReflog} onChange={setShowReflog} />
+          : <Switch label="Show Git-ignored files" shortLabel="Ignored" title="Include files ignored by Git" checked={showIgnoredFiles} onChange={setShowIgnoredFiles} />}
       </div>
       {mobile && workspaceTab === 'git' && <nav className="flex shrink-0 gap-2 p-2 border-b border-border" aria-label="Git views">
         {(['history', 'changes'] as const).map(tab => <button key={tab} aria-pressed={mobileTab === tab && !selectedCommit && !selectedFile} className={cn('px-3 py-2 rounded text-xs', mobileTab === tab && !selectedCommit && !selectedFile ? 'bg-accent/10 text-accent' : 'bg-bg-secondary text-text-secondary')} onClick={() => { selectCommit(null); selectFile(null); setMobileTab(tab); }}>{tab === 'history' ? 'History' : 'Changes'}</button>)}

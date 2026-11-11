@@ -934,7 +934,8 @@ export async function uncommit(repoPath: string, commitHash: string): Promise<vo
 
 export async function mergeBranch(
   repoPath: string,
-  sourceBranch: string
+  sourceBranch: string,
+  fastForward?: boolean
 ): Promise<{ message: string; merged: boolean; conflicts?: string[] }> {
   safeRef(sourceBranch);
   const git = getGit(repoPath);
@@ -942,7 +943,7 @@ export async function mergeBranch(
   const currentBranch = status.current || 'HEAD';
 
   try {
-    await git.merge([sourceBranch]);
+    await git.merge([...(fastForward === undefined ? [] : [fastForward ? '--ff' : '--no-ff']), sourceBranch]);
     return {
       merged: true,
       message: `Merged ${sourceBranch} into ${currentBranch}`,
@@ -966,7 +967,8 @@ export async function mergeBranch(
 export async function mergeToBranch(
   repoPath: string,
   sourceBranch: string,
-  targetBranch: string
+  targetBranch: string,
+  fastForward = true
 ): Promise<{ message: string; merged: boolean; conflicts?: string[] }> {
   safeRef(sourceBranch);
   safeRef(targetBranch);
@@ -988,7 +990,7 @@ export async function mergeToBranch(
   // Keep the destination checked out, including on conflicts or other merge
   // failures. Never reset or silently discard changes to return to the source.
   try {
-    const result = await mergeBranch(repoPath, `refs/heads/${sourceBranch}`);
+    const result = await mergeBranch(repoPath, `refs/heads/${sourceBranch}`, fastForward);
     return { ...result, message: result.merged
       ? `Merged ${sourceBranch} into ${targetBranch}`
       : `${result.message} on ${targetBranch}` };

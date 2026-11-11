@@ -1,3 +1,4 @@
+import { Switch } from '../ui/Switch';
 import { AIModelPicker } from "./AIModelPicker";
 import { useEffect, useState } from "react";
 import { api, type AISettings } from "../../lib/api";
@@ -85,14 +86,7 @@ export function AISettingsPanel() {
           devices.
         </p>
       </div>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={s.enabled}
-          onChange={(e) => update({ enabled: e.target.checked })}
-        />
-        Enable AI features
-      </label>
+      <Switch label="Enable AI features" checked={s.enabled} onChange={(enabled) => update({ enabled })} className="w-full" />
       <div className="border border-border rounded-lg p-4 space-y-4 bg-bg-primary/30">
         <label className="block space-y-1">
           <span>Provider</span>
@@ -151,17 +145,7 @@ export function AISettingsPanel() {
           />
         </label>
         {s.hasApiKey && (
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={removeKey}
-              onChange={(e) => {
-                setRemoveKey(e.target.checked);
-                setDirty(true);
-              }}
-            />
-            Remove saved key
-          </label>
+          <Switch label="Remove saved key" checked={removeKey} onChange={(value) => { setRemoveKey(value); setDirty(true); }} className="w-full" />
         )}
         {s.provider === "vercel" && <div className="space-y-3 border-t border-border pt-3">
           <a href="https://vercel.com/docs/ai-gateway/authentication-and-byok" target="_blank" rel="noopener noreferrer" className="text-accent underline">Gateway setup and BYOK requirements</a>
@@ -187,7 +171,7 @@ export function AISettingsPanel() {
                 placeholder={s.hasByokKey && !removeByokKey ? "Leave blank to keep the saved provider key" : "Enter your BYOK provider API key"}
                 onChange={e => { setByokKey(e.target.value); setDirty(true); }} />
             </label>
-            {s.hasByokKey && <label className="flex items-center gap-2"><input type="checkbox" checked={removeByokKey} onChange={e => { setRemoveByokKey(e.target.checked); setDirty(true); }} />Remove saved BYOK key</label>}
+            {s.hasByokKey && <Switch label="Remove saved BYOK key" checked={removeByokKey} onChange={(value) => { setRemoveByokKey(value); setDirty(true); }} className="w-full" />}
             <p className="text-text-muted">Both keys are required. SikaGit sends the provider key through Vercel and restricts routing to your BYOK provider. Choose a model served by that provider. Vercel may fall back to its credits if your key fails; a successful test does not confirm BYOK billing.</p>
           </>}
           {s.gatewayMode !== "byok" && <p className="text-text-muted">Uses your Gateway account’s routing and credits. BYOK configured in your Vercel dashboard may also apply. No provider key is sent by SikaGit in this mode.</p>}
@@ -227,14 +211,7 @@ export function AISettingsPanel() {
           </select>
         </label>
       </div>
-      <label className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={s.conventionalCommits}
-          onChange={(e) => update({ conventionalCommits: e.target.checked })}
-        />
-        Conventional commit titles
-      </label>
+      <Switch label="Conventional commit titles" checked={s.conventionalCommits} onChange={(conventionalCommits) => update({ conventionalCommits })} className="w-full" />
       <details className="space-y-2">
         <summary className="cursor-pointer text-text-secondary">
           Advanced limits
@@ -268,24 +245,8 @@ export function AISettingsPanel() {
       </details>
       <div className="border-t border-border pt-4 space-y-3">
         <h4 className="font-medium">Commit workflow · this device</h4>
-        <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            checked={backgroundSmartCommit}
-            onChange={(e) => setBackgroundSmartCommit(e.target.checked)}
-          />
-          Background Smart Commit — create suggested commits without the review
-          dialog
-        </label>
-        <label className="flex items-start gap-2">
-          <input
-            type="checkbox"
-            disabled={!backgroundSmartCommit}
-            checked={backgroundSmartCommitPush}
-            onChange={(e) => setBackgroundSmartCommitPush(e.target.checked)}
-          />
-          Also push after background commits
-        </label>
+        <Switch label="Background Smart Commit" description="Create suggested commits without the review dialog" checked={backgroundSmartCommit} onChange={setBackgroundSmartCommit} className="w-full" />
+        <Switch label="Also push after background commits" disabled={!backgroundSmartCommit} checked={backgroundSmartCommitPush} onChange={setBackgroundSmartCommitPush} className="w-full" />
         <p className="text-text-muted">
           Includes commit messages, smart grouping and save-for-later branch
           suggestions.

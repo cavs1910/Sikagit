@@ -696,3 +696,47 @@ test('cleanup previews are bounded and expire without mutating repository state'
  const now=Date.now;try{Date.now=()=>plan.expiresAt+1;await assert.rejects(()=>cleanup.executeBranchCleanup(folder,plan.planId,[plan.candidates[0].ref]),/expired/);}finally{Date.now=now;}
  assert.equal(run('for-each-ref','--format=%(refname)','refs/heads/old').split('\n').length,205);
 });
+
+test('explicit fast-forward overrides repository merge.ff=false for Merge and Merge To',async()=>{
+ for(const endpoint of ['/merge','/merge-to']){
+  const {folder,run}=mergeToFixture('explicit-ff-'+endpoint.slice(1));
+  const source=run('rev-parse','feature');run('config','merge.ff','false');
+  if(endpoint==='/merge')run('checkout','main');
+  const response=await request('/api/v1/git'+endpoint,{repo:folder,sourceBranch:'feature',targetBranch:'main',fastForward:true});
+  assert.equal(response.status,200);assert.equal((await response.json()).data.merged,true);
+  assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','HEAD'),source);
+  assert.equal(run('log','-1','--format=%P').split(' ').length,1);assert.equal(run('rev-parse','feature'),source);
+ }
+});
+test('disabling fast-forward creates a two-parent merge without forcing source deletion',async()=>{
+ for(const endpoint of ['/merge','/merge-to']){
+  const {folder,run}=mergeToFixture('no-ff-'+endpoint.slice(1));
+  const source=run('rev-parse','feature'),target=run('rev-parse','main');run('config','merge.ff','only');
+  if(endpoint==='/merge')run('checkout','main');
+  const response=await request('/api/v1/git'+endpoint,{repo:folder,sourceBranch:'feature',targetBranch:'main',fastForward:false});
+  assert.equal(response.status,200);assert.equal((await response.json()).data.merged,true);
+  assert.equal(run('branch','--show-current'),'main');assert.notEqual(run('rev-parse','HEAD'),source);
+  assert.deepEqual(run('log','-1','--format=%P').split(' '),[target,source]);assert.equal(run('rev-parse','feature'),source);
+  assert.equal((await request('/api/v1/git/branch/delete',{repo:folder,branch:'feature',force:false,expectedCommit:source})).status,200);
+  assert.equal(run('branch','--list','feature'),'');
+ }
+});
+test('allow fast-forward still merges diverged branches rather than requiring ff-only',async()=>{
+ for(const endpoint of ['/merge','/merge-to']){
+  const {folder,run}=mergeToFixture('diverged-ff-'+endpoint.slice(1));const source=run('rev-parse','feature');
+  run('checkout','main');fs.writeFileSync(path.join(folder,'main-only.txt'),'target work\n');run('add','.');run('commit','-qm','target change');const target=run('rev-parse','HEAD');
+  if(endpoint==='/merge-to')run('checkout','feature');
+  const response=await request('/api/v1/git'+endpoint,{repo:folder,sourceBranch:'feature',targetBranch:'main',fastForward:true});
+  assert.equal(response.status,200);assert.equal((await response.json()).data.merged,true);
+  assert.deepEqual(run('log','-1','--format=%P').split(' '),[target,source]);assert.equal(run('rev-parse','feature'),source);
+  assert.equal(fs.readFileSync(path.join(folder,'feature.txt'),'utf8'),'feature\n');assert.equal(fs.readFileSync(path.join(folder,'main-only.txt'),'utf8'),'target work\n');
+ }
+});
+test('merge endpoints reject non-boolean fast-forward options before touching branches',async()=>{
+ const {folder,run}=mergeToFixture('invalid-ff-option'),source=run('rev-parse','feature'),target=run('rev-parse','main');
+ for(const endpoint of ['/merge','/merge-to'])for(const fastForward of [null,'false','--ff-only',0,1,[],{}]){
+  const response=await request('/api/v1/git'+endpoint,{repo:folder,sourceBranch:'feature',targetBranch:'main',fastForward});
+  assert.equal(response.status,400);assert.match((await response.json()).error,/fastForward must be a boolean/);
+  assert.equal(run('branch','--show-current'),'feature');assert.equal(run('rev-parse','HEAD'),source);assert.equal(run('rev-parse','main'),target);assert.equal(run('status','--porcelain'),'');
+ }
+});

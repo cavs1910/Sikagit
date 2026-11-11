@@ -185,29 +185,23 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
               </>
             )}
           </div>
-          <div className="shrink-0 border-t border-border p-2 bg-bg-secondary">
-            <button
-              type="button" disabled={busy}
-              onClick={() => { setOpen(false); setCleanupOpen(true); }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-text-secondary hover:bg-bg-tertiary disabled:opacity-40"
-            ><Trash2 size={14} className="shrink-0" />Clean up merged branches…</button>
-            <button
-              type="button"
-              disabled={busy}
+          <div className="branch-menu-actions grid grid-cols-3 gap-1 shrink-0 border-t border-border p-1.5 bg-bg-secondary">
+            <button type="button" disabled={busy}
               onClick={() => { setOpen(false); setFilter(''); onMerge('from'); }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-accent hover:bg-accent/10 disabled:opacity-40"
-            >
-              <GitMerge size={14} className="shrink-0" />
-              Merge…
+              className="flex items-center justify-center gap-1 px-1 py-2 rounded whitespace-nowrap text-xs text-accent hover:bg-accent/10 disabled:opacity-40">
+              <GitMerge size={13} className="shrink-0" />Merge…
             </button>
-            <button
-              type="button"
+            <button type="button"
               disabled={busy || !branches.some(b => b.current && !b.isRemote) || !branches.some(b => !b.current && !b.isRemote)}
               onClick={() => { setOpen(false); setFilter(''); onMerge('to'); }}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded text-xs text-accent hover:bg-accent/10 disabled:opacity-40"
-            >
-              <GitMerge size={14} className="shrink-0" />
-              Merge To…
+              className="flex items-center justify-center gap-1 px-1 py-2 rounded whitespace-nowrap text-xs text-accent hover:bg-accent/10 disabled:opacity-40">
+              <GitMerge size={13} className="shrink-0" />Merge To…
+            </button>
+            <button type="button" disabled={busy}
+              aria-label="Clean up merged branches…" title="Clean up merged branches…"
+              onClick={() => { setOpen(false); setCleanupOpen(true); }}
+              className="flex items-center justify-center gap-1 px-1 py-2 rounded whitespace-nowrap text-xs text-text-secondary hover:bg-bg-tertiary disabled:opacity-40">
+              <Trash2 size={12} className="shrink-0" />Clean up…
             </button>
           </div>
         </div>

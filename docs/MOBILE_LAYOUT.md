@@ -11,21 +11,32 @@ only the bookmark, preserving files on disk. Desktop uses the same controls.
 The workspace tab bar contains **Show reflog** for History & Changes and the
 matching **Show Git-ignored files** switch for Files. On mobile, the visible labels are shortened to **Git**, **Reflog** and **Ignored** while their accessible names remain complete.
 
-The branch picker keeps **Merge…** and **Merge To…** buttons in its footer while
-the branch list scrolls independently. **Merge…** brings another local branch
+The branch picker groups **Merge…**, **Merge To…** and **Clean up…** in a single compact footer row. Clean up retains its full accessible label and tooltip, **Clean up merged branches…**. The branch list scrolls independently; the actions stay visible. **Merge…** brings another local branch
 into the current branch. **Merge To…** selects a different local destination
 (preferring `main` or `master`), previews current → destination and switches there
 before merging. It requires a clean working tree and checks that the source is
 still active under the repository mutex. It stays on the destination on success,
 conflict or merge failure; abort also leaves the destination checked out. The
-source is kept unless **Delete source branch after merge** is explicitly checked
-and the merge succeeds. Neither action pushes. Detached HEAD and repositories
+source is kept unless **Delete source branch after merge** is explicitly enabled
+and the merge succeeds. Neither action pushes.
+
+Both dialogs use the shared **Allow fast-forward** switch, enabled by default.
+It explicitly passes `--ff`: use fast-forward when the destination is an
+ancestor of the source; otherwise perform an ordinary merge commit. It is not
+FF-only. Disabling the switch passes `--no-ff`, creating a merge commit even
+when fast-forward would be possible (already-merged histories remain a no-op).
+Both choices override the repository’s `merge.ff` setting for this operation.
+Omitting the API field keeps fast-forward enabled; non-boolean values are
+rejected before switching or merging. **Delete source branch after merge** is
+also a switch and remains off by default. Both switches are disabled while busy
+or resolving conflicts. The dialog body scrolls in short viewports while its
+header and action footer stay reachable. Detached HEAD and repositories
 without another local branch disable **Merge To…**.
 
 Each branch row also has a trash button with an explicit local/remote label and
 a confirmation dialog. Deleting a local branch keeps its remote counterpart;
 Git refuses unmerged branches unless **Force delete, even with unmerged commits**
-is explicitly checked. The active branch and branches checked out in another
+is explicitly enabled. The active branch and branches checked out in another
 worktree cannot be deleted, even with force. A stale selection is rejected.
 
 Deleting a remote branch removes it from the server while preserving local
@@ -146,3 +157,21 @@ The mobile shell observes `visualViewport` resize events, including when a
 software keyboard changes only the visible height. The expanded editor uses
 the same height. Search fields use a 16 px mobile font and the native search
 panel can scroll when its controls exceed the available height.
+
+## Shared boolean controls
+
+`client/src/components/ui/Switch.tsx` provides the same accessible control for
+workspace preferences, merge options, cleanup scope, Settings, AI settings and
+filters, and optional force deletion in confirmations. It supports descriptions,
+short mobile labels, disabled states and native keyboard activation. Selection
+lists retain checkboxes. In a confirmation, Enter on the switch only toggles
+that option; activating Cancel with Enter cancels rather than confirming.
+
+Validation on 2026-11-11: all 71 production-image security cases pass, including
+explicit FF overriding `merge.ff=false`, no-FF creating a two-parent merge with
+`merge.ff=only`, divergent merges with FF enabled, and rejecting invalid option
+types without changing branches. Merge, branch deletion and cleanup browser
+checks pass at 320, 390 and 1280 px with API/Git mutations mocked. The merge
+checks also cover keyboard switches, compact footer geometry and a 350 px
+viewport. Backend TypeScript and Vite compile; strict frontend TypeScript keeps
+the same 35 baseline diagnostics.

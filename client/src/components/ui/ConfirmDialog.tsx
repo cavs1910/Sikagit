@@ -1,3 +1,4 @@
+import { Switch } from './Switch';
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Info } from 'lucide-react';
 import { useConfirmStore } from '../../store/confirmStore';
@@ -20,7 +21,11 @@ export function ConfirmDialog() {
     if (!options) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') handleCancel();
-      if (e.key === 'Enter') handleConfirm(options.checkbox ? checkboxChecked : undefined);
+      // Native controls handle Enter themselves. In particular, toggling a
+      // switch or activating Cancel must never also confirm the operation.
+      if (e.key === 'Enter' && !(e.target instanceof Element && e.target.closest('button, input, select, textarea, a'))) {
+        handleConfirm(options.checkbox ? checkboxChecked : undefined);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -65,17 +70,7 @@ export function ConfirmDialog() {
         </div>
         {checkbox && (
           <div className="px-4 pb-1">
-            <label className="flex items-center gap-2 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={checkboxChecked}
-                onChange={e => setCheckboxChecked(e.target.checked)}
-                className="w-3.5 h-3.5 rounded border-border bg-bg-primary accent-accent cursor-pointer"
-              />
-              <span className="text-xs text-text-secondary group-hover:text-text-primary transition-colors">
-                {checkbox.label}
-              </span>
-            </label>
+            <Switch label={checkbox.label} checked={checkboxChecked} onChange={setCheckboxChecked} className="w-full" />
           </div>
         )}
         <div className="flex justify-end gap-2 px-4 py-3">

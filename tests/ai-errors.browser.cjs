@@ -44,9 +44,18 @@ const origin=process.env.SIKAGIT_TEST_ORIGIN||'http://127.0.0.1:5184';
   assert(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth));
   await page.getByRole('button',{name:'AI settings',exact:true}).click();await page.getByRole('heading',{name:'AI Assistant',exact:true}).waitFor();assert.equal(previews,1);assert.equal(tests,0);
   const settingsDialog=page.locator('.app-dialog').last();
+  const conventional=settingsDialog.getByRole('switch',{name:'Conventional commit titles',exact:true});
+  await conventional.press('Space');assert.equal(await conventional.getAttribute('aria-checked'),'false');await conventional.press('Space');
+  const background=settingsDialog.getByRole('switch',{name:'Background Smart Commit',exact:true}),push=settingsDialog.getByRole('switch',{name:'Also push after background commits',exact:true});
+  assert(await push.isDisabled());await background.click();assert(await push.isEnabled());await background.click();assert(await push.isDisabled());
   await settingsDialog.getByText('Advanced limits',{exact:false}).click();
   await settingsDialog.getByRole('spinbutton',{name:'Maximum output tokens',exact:true}).fill('4096');
   await settingsDialog.getByRole('button',{name:'Save AI configuration',exact:true}).click();await settingsDialog.getByText('Configuration saved on the server.',{exact:true}).waitFor();assert.equal(saves,1);assert.equal(previews,1);assert.equal(tests,0);
+  await settingsDialog.getByRole('button',{name:'General',exact:true}).click();
+  for(const name of ['Group Files by Folder','Auto-fetch on Open','Demo / Privacy Mode']){
+   const option=settingsDialog.getByRole('switch',{name,exact:true}),before=await option.getAttribute('aria-checked');
+   await option.press('Enter');assert.notEqual(await option.getAttribute('aria-checked'),before);await option.press('Enter');assert.equal(await option.getAttribute('aria-checked'),before);
+  }
   // The settings close button contains X; the draft settings are already saved.
   await settingsDialog.locator('button').filter({has:page.locator('svg.lucide-x')}).click();
   await page.getByRole('button',{name:'Retry analysis',exact:true}).click();await page.getByText(/Invalid field: groups\[0\].title/).waitFor();assert.equal(previews,2);

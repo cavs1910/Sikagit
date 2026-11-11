@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, GitMerge, Loader2, AlertTriangle, ChevronDown, Trash2 } from 'lucide-react';
+import { X, GitMerge, Loader2, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Switch } from '../ui/Switch';
 import { useStatusStore } from '../../store/statusStore';
 import { useLogStore } from '../../store/logStore';
 import { useToastStore } from '../../store/toastStore';
@@ -28,6 +29,7 @@ export function MergeDialog({ repoPath, preselectedBranch, mode = 'from', onClos
   const sourceBranch = mergeTo ? currentBranch : selectedBranch;
   const targetBranch = mergeTo ? selectedBranch : currentBranch;
   const [deleteBranchAfter, setDeleteBranchAfter] = useState(false);
+  const [fastForward, setFastForward] = useState(true);
   const [merging, setMerging] = useState(false);
   const [aborting, setAborting] = useState(false);
   const [conflicts, setConflicts] = useState<string[] | null>(null);
@@ -41,8 +43,8 @@ export function MergeDialog({ repoPath, preselectedBranch, mode = 'from', onClos
     setConflicts(null);
     try {
       const result = mergeTo
-        ? await api.mergeToBranch(repoPath, sourceBranch, targetBranch)
-        : await api.mergeBranch(repoPath, sourceBranch);
+        ? await api.mergeToBranch(repoPath, sourceBranch, targetBranch, fastForward)
+        : await api.mergeBranch(repoPath, sourceBranch, fastForward);
       if (result.merged) {
         addToast('success', result.message);
         if (deleteBranchAfter) {
@@ -90,7 +92,9 @@ export function MergeDialog({ repoPath, preselectedBranch, mode = 'from', onClos
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={closeDialog}>
       <div
-        className="app-dialog bg-bg-secondary border border-border rounded-lg w-[440px] shadow-xl flex flex-col max-h-[80vh]"
+        role="dialog" aria-modal="true" aria-label={mergeTo ? 'Merge To' : 'Merge Branch'}
+        className="app-dialog bg-bg-secondary border border-border rounded-lg w-[440px] shadow-xl flex flex-col"
+        style={{ maxHeight: 'calc(var(--app-viewport-height, 100dvh) - 2rem)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -110,7 +114,7 @@ export function MergeDialog({ repoPath, preselectedBranch, mode = 'from', onClos
         </div>
 
         {/* Content */}
-        <div className="p-4 space-y-4">
+        <div className="p-4 space-y-4 min-h-0 overflow-y-auto">
           {/* Branch selector */}
           <div>
             <label className="block text-xs text-text-secondary mb-1.5 font-medium">{mergeTo ? 'Merge into' : 'Merge from'}</label>
@@ -168,20 +172,16 @@ export function MergeDialog({ repoPath, preselectedBranch, mode = 'from', onClos
             Commit or stash local changes first. This does not push to the remote.
           </p>}
 
-          {/* Delete branch checkbox */}
-          <label className="flex items-center gap-2 cursor-pointer group">
-            <input
-              type="checkbox"
-              disabled={busy || conflicts !== null}
-              checked={deleteBranchAfter}
-              onChange={e => setDeleteBranchAfter(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border-border bg-bg-primary accent-accent cursor-pointer"
-            />
-            <span className="text-xs text-text-secondary group-hover:text-text-primary transition-colors flex items-center gap-1">
-              <Trash2 size={10} />
-              Delete source branch after merge
-            </span>
-          </label>
+          <div className="space-y-3 border-t border-border pt-3">
+            <Switch label="Allow fast-forward" checked={fastForward} onChange={setFastForward}
+              disabled={busy || conflicts !== null} className="w-full"
+              description={fastForward
+                ? 'Fast-forward when possible. If branches have diverged, create a merge commit.'
+                : 'Create a merge commit even when fast-forward is possible.'} />
+            <Switch label="Delete source branch after merge" checked={deleteBranchAfter} onChange={setDeleteBranchAfter}
+              disabled={busy || conflicts !== null} className="w-full"
+              description="Delete the local source branch only after a successful merge. Remote branches are kept." />
+          </div>
 
           {/* Error */}
           {error && (
@@ -224,6 +224,7 @@ export function MergeDialog({ repoPath, preselectedBranch, mode = 'from', onClos
             <>
               <button
                 onClick={closeDialog}
+                disabled={busy}
                 className="px-3 py-1.5 rounded text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
               >
                 Cancel

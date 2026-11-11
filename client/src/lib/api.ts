@@ -111,15 +111,15 @@ export const api = {
       `/git/graph?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}&showReflog=${showReflog}`
     ),
   getBranches: (repo: string) => request<import('@sikagit/shared').GitBranch[]>(`/git/branches?repo=${encodeURIComponent(repo)}`),
-  mergeBranch: (repo: string, sourceBranch: string) =>
+  mergeBranch: (repo: string, sourceBranch: string, fastForward = true) =>
     request<{ message: string; merged: boolean; conflicts?: string[] }>('/git/merge', {
       method: 'POST',
-      body: JSON.stringify({ repo, sourceBranch }),
+      body: JSON.stringify({ repo, sourceBranch, fastForward }),
     }),
-  mergeToBranch: (repo: string, sourceBranch: string, targetBranch: string) =>
+  mergeToBranch: (repo: string, sourceBranch: string, targetBranch: string, fastForward = true) =>
     request<{ message: string; merged: boolean; conflicts?: string[] }>('/git/merge-to', {
       method: 'POST',
-      body: JSON.stringify({ repo, sourceBranch, targetBranch }),
+      body: JSON.stringify({ repo, sourceBranch, targetBranch, fastForward }),
     }),
   mergeAbort: (repo: string) =>
     request<void>('/git/merge/abort', {

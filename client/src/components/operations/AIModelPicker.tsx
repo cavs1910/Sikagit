@@ -1,3 +1,4 @@
+import { Switch } from '../ui/Switch';
 import { useEffect, useMemo, useRef, useState } from "react";
 import { RefreshCw, Search, Check, ExternalLink, Loader2 } from "lucide-react";
 import type { AIModelCatalog, AIModelInfo } from "@sikagit/shared";
@@ -149,28 +150,8 @@ export function AIModelPicker({
             {loading ? "Loading models…" : matches.length + " models"} · USD /
             1M tokens
           </span>
-          <label className="flex items-center gap-1.5" title="Show models with declared JSON schema support. Disable to include JSON compatibility and unverified models.">
-            <input
-              type="checkbox"
-              checked={structuredOnly}
-              onChange={(e) => {
-                setStructuredOnly(e.target.checked);
-                setShown(80);
-              }}
-            />
-            JSON schema support
-          </label>
-          <label className="flex items-center gap-1.5">
-            <input
-              type="checkbox"
-              checked={freeOnly}
-              onChange={(e) => {
-                setFreeOnly(e.target.checked);
-                setShown(80);
-              }}
-            />
-            Free only
-          </label>
+          <Switch label="JSON schema support" title="Show models with declared JSON schema support. Disable to include JSON compatibility and unverified models." checked={structuredOnly} onChange={(value) => { setStructuredOnly(value); setShown(80); }} />
+          <Switch label="Free only" checked={freeOnly} onChange={(value) => { setFreeOnly(value); setShown(80); }} />
         </div>
         {structuredOnly && <p className="px-3 pb-2 text-[0.65rem] text-text-muted">
           Models with declared structured output support. Disable the filter to include JSON compatibility and unverified models.

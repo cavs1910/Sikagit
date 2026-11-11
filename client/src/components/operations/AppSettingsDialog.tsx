@@ -1,3 +1,4 @@
+import { Switch } from '../ui/Switch';
 import { useAuthStore } from '../../store/authStore';
 import { useToastStore } from '../../store/toastStore';
 import { AISettingsPanel } from './AISettingsPanel';
@@ -182,119 +183,12 @@ export function AppSettingsDialog({ onClose, initialTab = 'general' }: AppSettin
                   </div>
                   <button type="button" disabled={signingOut} onClick={() => void signOut()} className="shrink-0 rounded border border-border px-3 py-2 text-xs text-text-secondary hover:text-text-primary disabled:opacity-50">{signingOut ? 'Signing out…' : 'Sign out'}</button>
                 </div>
-                {/* Group files by folder */}
-                <div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Group Files by Folder</h3>
-                      <p className="text-[0.6rem] text-text-muted">Group staged and unstaged files by their parent directory</p>
-                    </div>
-                    <div
-                      onClick={() => setDraftGroupFiles(!draftGroupFiles)}
-                      style={{
-                        width: 32,
-                        height: 18,
-                        borderRadius: 9,
-                        backgroundColor: draftGroupFiles ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                        border: `1px solid ${draftGroupFiles ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                        position: 'relative',
-                        transition: 'background-color 0.2s, border-color 0.2s',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 12,
-                          height: 12,
-                          borderRadius: '50%',
-                          backgroundColor: '#fff',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                          position: 'absolute',
-                          top: 2,
-                          left: draftGroupFiles ? 17 : 2,
-                          transition: 'left 0.2s',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <Switch label="Group Files by Folder" description="Group staged and unstaged files by their parent directory" checked={draftGroupFiles} onChange={setDraftGroupFiles} className="w-full" />
 
-                {/* Auto-fetch on open */}
-                <div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Auto-fetch on Open</h3>
-                      <p className="text-[0.6rem] text-text-muted">Run a background <span className="font-mono">git fetch</span> when you open a repo so the pull indicator is up to date</p>
-                    </div>
-                    <div
-                      onClick={() => setDraftAutoFetch(!draftAutoFetch)}
-                      style={{
-                        width: 32,
-                        height: 18,
-                        borderRadius: 9,
-                        backgroundColor: draftAutoFetch ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                        border: `1px solid ${draftAutoFetch ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                        position: 'relative',
-                        transition: 'background-color 0.2s, border-color 0.2s',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 12,
-                          height: 12,
-                          borderRadius: '50%',
-                          backgroundColor: '#fff',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                          position: 'absolute',
-                          top: 2,
-                          left: draftAutoFetch ? 17 : 2,
-                          transition: 'left 0.2s',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <Switch label="Auto-fetch on Open" description="Run a background Git fetch when you open a repository to refresh remote status" checked={draftAutoFetch} onChange={setDraftAutoFetch} className="w-full" />
 
-                {/* Demo / Privacy mode */}
-                <div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-xs font-medium text-text-primary mb-0.5">Demo / Privacy Mode</h3>
-                      <p className="text-[0.6rem] text-text-muted">Blur all project and repository names in the sidebar so you can safely screen-record a demo. Hover a row to reveal just that name.</p>
-                    </div>
-                    <div
-                      onClick={() => setDraftDemoMode(!draftDemoMode)}
-                      style={{
-                        width: 32,
-                        height: 18,
-                        borderRadius: 9,
-                        backgroundColor: draftDemoMode ? 'var(--color-accent)' : 'var(--color-bg-tertiary)',
-                        border: `1px solid ${draftDemoMode ? 'var(--color-accent)' : 'var(--color-border)'}`,
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                        position: 'relative',
-                        transition: 'background-color 0.2s, border-color 0.2s',
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 12,
-                          height: 12,
-                          borderRadius: '50%',
-                          backgroundColor: '#fff',
-                          boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
-                          position: 'absolute',
-                          top: 2,
-                          left: draftDemoMode ? 17 : 2,
-                          transition: 'left 0.2s',
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <Switch label="Demo / Privacy Mode" description="Blur project and repository names in the sidebar. Hover a row to reveal its name." checked={draftDemoMode} onChange={setDraftDemoMode} className="w-full" />
+
               </div>
             )}
 
