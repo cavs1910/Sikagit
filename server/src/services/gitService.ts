@@ -14,6 +14,7 @@ import type {
   DiffWhitespaceMode,
   DiffWhitespaceSuppression,
   DiffPayload,
+  BranchMergeOptions,
 } from '@sikagit/shared';
 import { normalizePath } from './pathService';
 import { clearRepoSlow, getSlowInfoByPath, isRepoSlowByPath, isSlowProbeDue, markRepoSlow } from './db';
@@ -988,7 +989,31 @@ export async function mergeToBranch(
   }
   const merging = await git.raw(['rev-parse', '--verify', 'MERGE_HEAD']).then(() => true, () => false);
   if (merging) throw new Error('Resolve or abort the existing merge first.');
-  await git.raw(switchForMergeCommand(targetBranch));
+  return mergeIntoCheckedDestination(repoPath, sourceBranch, targetBranch, fastForward, status.current, git);
+}
+
+// Both branches can be selected independently. The reviewed active branch and
+// both tips must still match before any switch/index/working-tree mutation.
+export async function mergeBranches(repoPath: string, options: BranchMergeOptions): Promise<{ message: string; merged: boolean; conflicts?: string[] }> {
+  const { sourceBranch, targetBranch, expectedBranch, expectedSourceCommit, expectedTargetCommit, fastForward = true } = options;
+  safeRef(sourceBranch); safeRef(targetBranch); safeRef(expectedBranch);
+  const git = getGit(repoPath);
+  const status = await git.status();
+  if (status.detached || status.current !== expectedBranch) throw new Error('The active branch changed. Reopen Merge and try again.');
+  const local = (await git.branchLocal()).all;
+  if (!local.includes(expectedBranch)) throw new Error('Check out an existing local branch before merging.');
+  if (sourceBranch === targetBranch || !local.includes(sourceBranch) || !local.includes(targetBranch)) throw new Error('Choose two different existing local branches.');
+  if (!expectedSourceCommit || !expectedTargetCommit) throw new Error('Refresh the branches before merging.');
+  await checkedBranchTip(git, `refs/heads/${sourceBranch}`, expectedSourceCommit, 'merging');
+  await checkedBranchTip(git, `refs/heads/${targetBranch}`, expectedTargetCommit, 'merging');
+  const merging = await git.raw(['rev-parse', '--verify', 'MERGE_HEAD']).then(() => true, () => false);
+  if (merging) throw new Error('Resolve or abort the existing merge first.');
+  if (!status.isClean()) throw new Error('Commit or stash local changes before merging.');
+  return mergeIntoCheckedDestination(repoPath, sourceBranch, targetBranch, fastForward, status.current, git);
+}
+
+async function mergeIntoCheckedDestination(repoPath: string, sourceBranch: string, targetBranch: string, fastForward: boolean, current: string, git: SimpleGit) {
+  if (current !== targetBranch) await git.raw(switchForMergeCommand(targetBranch));
   // Keep the destination checked out, including on conflicts or other merge
   // failures. Never reset or silently discard changes to return to the source.
   try {
@@ -1006,13 +1031,13 @@ export async function abortMerge(repoPath: string): Promise<void> {
   await git.merge(abortMergeCommand().slice(1));
 }
 
-async function checkedBranchTip(git: SimpleGit, ref: string, expectedCommit?: string): Promise<string> {
+async function checkedBranchTip(git: SimpleGit, ref: string, expectedCommit?: string, action = 'deleting'): Promise<string> {
   if (expectedCommit !== undefined && !/^[a-fA-F0-9]{4,64}$/.test(expectedCommit)) {
     throw new Error('Invalid expected branch commit');
   }
   const tip = (await git.raw(['show-ref', '--verify', '--hash', ref])).trim();
   if (expectedCommit && !tip.startsWith(expectedCommit.toLowerCase())) {
-    throw new Error('The branch changed. Refresh the branch list and review it before deleting.');
+    throw new Error(`The branch changed. Refresh the branch list and review it before ${action}.`);
   }
   return tip;
 }

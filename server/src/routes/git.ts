@@ -16,7 +16,7 @@ router.use((req, res, next) => {
       res.status(400).json({ success: false, error: `${key} must be a boolean` }); return;
     }
   }
-  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'targetBranch', 'expectedCommit', 'baseRef', 'planId', 'key', 'value', 'url', 'branchName', 'patch']) {
+  for (const key of ['repo', 'message', 'hash', 'branch', 'sourceBranch', 'targetBranch', 'expectedBranch', 'expectedSourceCommit', 'expectedTargetCommit', 'expectedCommit', 'baseRef', 'planId', 'key', 'value', 'url', 'branchName', 'patch']) {
     if (req.body?.[key] !== undefined && typeof req.body[key] !== 'string') {
       res.status(400).json({ success: false, error: `${key} must be a string` }); return;
     }
@@ -320,6 +320,22 @@ router.post('/switch-branch', asyncHandler(async (req: Request, res: Response) =
   }
   const result = await withRepoLock(repoPath, () => gitService.switchBranch(repoPath, branch));
   res.json({ success: true, data: result });
+}));
+
+router.post('/merge-branches', asyncHandler(async (req: Request, res: Response) => {
+  const repoPath = (req as any).repoPath;
+  const { sourceBranch, targetBranch, expectedBranch, expectedSourceCommit, expectedTargetCommit, fastForward } = req.body;
+  if (![sourceBranch, targetBranch, expectedBranch, expectedSourceCommit, expectedTargetCommit].every(value => typeof value === 'string' && value.length > 0) ||
+      (fastForward !== undefined && typeof fastForward !== 'boolean')) {
+    res.status(400).json({ success: false, error: 'Choose both branches with their reviewed commits and a boolean fastForward option.' });
+    return;
+  }
+  try {
+    const result = await withRepoLock(repoPath, () => gitService.mergeBranches(repoPath, { sourceBranch, targetBranch, expectedBranch, expectedSourceCommit, expectedTargetCommit, fastForward }));
+    res.json({ success: true, data: result });
+  } catch (error) {
+    res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Merge failed' });
+  }
 }));
 
 router.post('/merge', asyncHandler(async (req: Request, res: Response) => {

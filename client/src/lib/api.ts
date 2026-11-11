@@ -111,6 +111,10 @@ export const api = {
       `/git/graph?repo=${encodeURIComponent(repo)}&limit=${limit}&skip=${skip}&showReflog=${showReflog}`
     ),
   getBranches: (repo: string) => request<import('@sikagit/shared').GitBranch[]>(`/git/branches?repo=${encodeURIComponent(repo)}`),
+  mergeBranches: (repo: string, options: import('@sikagit/shared').BranchMergeOptions) =>
+    request<{ message: string; merged: boolean; conflicts?: string[] }>('/git/merge-branches', {
+      method: 'POST', body: JSON.stringify({ repo, ...options }),
+    }),
   mergeBranch: (repo: string, sourceBranch: string, fastForward = true) =>
     request<{ message: string; merged: boolean; conflicts?: string[] }>('/git/merge', {
       method: 'POST',

@@ -792,3 +792,57 @@ test('command preview routes require authentication and a valid repository-bound
  }
  assert(run('rev-parse','feature'));
 });
+
+function branchMergeRequest(folder,run,sourceBranch='feature',targetBranch='main',extra={}) {
+ return {repo:folder,sourceBranch,targetBranch,expectedBranch:run('branch','--show-current'),expectedSourceCommit:run('rev-parse','refs/heads/'+sourceBranch),expectedTargetCommit:run('rev-parse','refs/heads/'+targetBranch),fastForward:true,...extra};
+}
+test('unified merge integrates any reviewed local pair while preserving an unrelated active branch',async()=>{
+ const {folder,run}=mergeToFixture('unified-arbitrary'),source=run('rev-parse','feature');
+ run('checkout','-qb','holding','main');fs.writeFileSync(path.join(folder,'holding.txt'),'keep holding\n');run('add','.');run('commit','-qm','holding work');const holding=run('rev-parse','HEAD');
+ const response=await request('/api/v1/git/merge-branches',branchMergeRequest(folder,run));assert.equal(response.status,200);assert.equal((await response.json()).data.merged,true);
+ assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','HEAD'),source);assert.equal(run('rev-parse','holding'),holding);assert.equal(run('rev-parse','feature'),source);assert.equal(run('status','--porcelain'),'');
+});
+test('unified merge supports the current destination, explicit FF/no-FF and same-name tags',async()=>{
+ for(const fastForward of [true,false]){
+  const {folder,run}=mergeToFixture('unified-current-'+fastForward),source=run('rev-parse','feature'),target=run('rev-parse','main');run('tag','feature','main');run('checkout','main');
+  const response=await request('/api/v1/git/merge-branches',branchMergeRequest(folder,run,'feature','main',{fastForward}));assert.equal(response.status,200);assert.equal((await response.json()).data.merged,true);
+  assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','refs/heads/feature'),source);
+  if(fastForward)assert.equal(run('rev-parse','HEAD'),source);else assert.deepEqual(run('log','-1','--format=%P').split(' '),[target,source]);
+ }
+});
+test('unified merge rejects stale active/source/destination and invalid plans before switching',async()=>{
+ const {folder,run}=mergeToFixture('unified-stale'),body=branchMergeRequest(folder,run),head=run('rev-parse','HEAD'),refs=run('for-each-ref','--format=%(refname) %(objectname)'),index=run('write-tree');
+ for(const fields of [{expectedBranch:'main'},{expectedSourceCommit:body.expectedTargetCommit},{expectedTargetCommit:body.expectedSourceCommit},{expectedSourceCommit:undefined},{expectedTargetCommit:undefined},{expectedSourceCommit:'--all'},{expectedTargetCommit:[]},{sourceBranch:'main'},{sourceBranch:['feature']},{targetBranch:'remotes/origin/main'},{targetBranch:'--help'},{targetBranch:'../main'},{fastForward:'false'}]){
+  const response=await request('/api/v1/git/merge-branches',{...body,...fields});assert.equal(response.status,400);assert.equal(run('branch','--show-current'),'feature');assert.equal(run('rev-parse','HEAD'),head);assert.equal(run('for-each-ref','--format=%(refname) %(objectname)'),refs);assert.equal(run('write-tree'),index);
+ }
+ run('checkout','--detach',head);assert.equal((await request('/api/v1/git/merge-branches',{...body,expectedBranch:'HEAD'})).status,400);assert.equal(run('rev-parse','HEAD'),head);assert.equal(run('branch','--show-current'),'');
+});
+test('unified merge preserves dirty and partially staged files with or without switching destinations',async()=>{
+ const {folder,run}=mergeToFixture('unified-dirty');
+ for(const active of ['feature','main'])for(const dirty of ['untracked','unstaged','partial']){
+  run('checkout',active);const body=branchMergeRequest(folder,run);
+  const filename=dirty==='untracked'?'untracked.txt':'shared.txt';
+  if(dirty==='partial'){fs.writeFileSync(path.join(folder,filename),'staged version\n');run('add',filename);}
+  fs.writeFileSync(path.join(folder,filename),'keep working draft\n');const head=run('rev-parse','HEAD'),index=run('write-tree'),status=run('status','--porcelain');
+  const response=await request('/api/v1/git/merge-branches',body);assert.equal(response.status,400);assert.equal(run('branch','--show-current'),active);assert.equal(run('rev-parse','HEAD'),head);assert.equal(run('write-tree'),index);assert.equal(run('status','--porcelain'),status);assert.equal(fs.readFileSync(path.join(folder,filename),'utf8'),'keep working draft\n');
+  if(dirty==='untracked')fs.unlinkSync(path.join(folder,filename));else{run('reset','--',filename);run('checkout','--',filename);}
+ }
+});
+test('unified merge stays on the destination during conflicts, refuses nested merges and abort preserves all tips',async()=>{
+ const {folder,run}=mergeToFixture('unified-conflict');fs.writeFileSync(path.join(folder,'shared.txt'),'source conflict\n');run('add','.');run('commit','-qm','source conflict');const source=run('rev-parse','feature');
+ run('checkout','main');fs.writeFileSync(path.join(folder,'shared.txt'),'target conflict\n');run('add','.');run('commit','-qm','target conflict');const target=run('rev-parse','main');run('checkout','-qb','holding');
+ const response=await request('/api/v1/git/merge-branches',branchMergeRequest(folder,run));assert.equal(response.status,200,JSON.stringify(await response.clone().json()));assert.deepEqual((await response.json()).data.conflicts,['shared.txt']);assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','MERGE_HEAD'),source);
+ const nested=await request('/api/v1/git/merge-branches',branchMergeRequest(folder,run));assert.equal(nested.status,400);assert.match((await nested.json()).error,/Resolve or abort/);assert.equal(run('rev-parse','MERGE_HEAD'),source);
+ assert.equal((await request('/api/v1/git/merge/abort',{repo:folder})).status,200);assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','HEAD'),target);assert.equal(run('rev-parse','holding'),target);assert.equal(run('rev-parse','feature'),source);assert.equal(run('status','--porcelain'),'');
+});
+test('unified merge preserves refs after unrelated-history and checked-out-worktree failures',async()=>{
+ const {folder,run}=mergeToFixture('unified-failures');const source=run('rev-parse','feature');
+ run('checkout','--orphan','unrelated');run('rm','-rf','.');fs.writeFileSync(path.join(folder,'other.txt'),'unrelated\n');run('add','.');run('commit','-qm','unrelated');const target=run('rev-parse','HEAD');run('checkout','feature');
+ const response=await request('/api/v1/git/merge-branches',branchMergeRequest(folder,run,'feature','unrelated'));assert.equal(response.status,400);assert.equal(run('branch','--show-current'),'unrelated');assert.equal(run('rev-parse','HEAD'),target);assert.equal(run('rev-parse','feature'),source);
+ run('checkout','feature');run('worktree','add','--quiet',path.join(root,'unified-main-worktree'),'main');const before=run('for-each-ref','--format=%(refname) %(objectname)');
+ assert.equal((await request('/api/v1/git/merge-branches',branchMergeRequest(folder,run))).status,400);assert.equal(run('branch','--show-current'),'feature');assert.equal(run('rev-parse','HEAD'),source);assert.equal(run('for-each-ref','--format=%(refname) %(objectname)'),before);
+});
+test('unified merge checks the reviewed active branch inside the mutex for competing requests',async()=>{
+ const {folder,run}=mergeToFixture('unified-competing');run('checkout','-qb','holding');const body=branchMergeRequest(folder,run),source=run('rev-parse','feature');
+ const results=await Promise.all([request('/api/v1/git/merge-branches',body),request('/api/v1/git/merge-branches',body)]);assert.deepEqual(results.map(r=>r.status).sort(),[200,400]);assert.equal(run('branch','--show-current'),'main');assert.equal(run('rev-parse','HEAD'),source);assert.equal(run('rev-parse','holding'),source);assert.equal(run('status','--porcelain'),'');
+});

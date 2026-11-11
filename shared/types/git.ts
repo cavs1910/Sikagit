@@ -180,6 +180,16 @@ export interface BranchCleanupCandidate {
   commit: string;
   isRemote: boolean;
 }
+
+/** Snapshot reviewed in the unified merge dialog. */
+export interface BranchMergeOptions {
+  sourceBranch: string;
+  targetBranch: string;
+  expectedBranch: string;
+  expectedSourceCommit: string;
+  expectedTargetCommit: string;
+  fastForward?: boolean;
+}
 export type BranchCleanupBase = BranchCleanupCandidate;
 export interface BranchCleanupPreview {
   planId: string;

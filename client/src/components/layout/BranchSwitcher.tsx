@@ -20,7 +20,7 @@ const remoteLabel = (name: string) => name.replace(/^remotes\//, '');
  * dropdown of all local + remote branches. Selecting one switches to it via the
  * safe /git/switch-branch endpoint (creates a tracking branch for remotes).
  */
-export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPath: string; onMerge: (mode: 'from' | 'to') => void; compact?: boolean }) {
+export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPath: string; onMerge: () => void; compact?: boolean }) {
   const branches = useStatusStore(s => s.loadedRepo === repoPath ? s.branches : emptyBranches);
   const status = useStatusStore(s => s.loadedRepo === repoPath ? s.status : null);
   const ready = useStatusStore(s => s.loadedRepo === repoPath && s.branchesLoaded);
@@ -188,17 +188,11 @@ export function BranchSwitcher({ repoPath, onMerge, compact = false }: { repoPat
               </>
             )}
           </div>
-          <div className="branch-menu-actions grid grid-cols-3 gap-1 shrink-0 border-t border-border p-1.5 bg-bg-secondary">
-            <button type="button" disabled={busy}
-              onClick={() => { setOpen(false); setFilter(''); onMerge('from'); }}
+          <div className="branch-menu-actions grid grid-cols-2 gap-1 shrink-0 border-t border-border p-1.5 bg-bg-secondary">
+            <button type="button" disabled={busy || !branches.some(b => b.current && !b.isRemote) || branches.filter(b => !b.isRemote).length < 2}
+              onClick={() => { setOpen(false); setFilter(''); onMerge(); }}
               className="flex items-center justify-center gap-1 px-1 py-2 rounded whitespace-nowrap text-xs text-accent hover:bg-accent/10 disabled:opacity-40">
               <GitMerge size={13} className="shrink-0" />Merge…
-            </button>
-            <button type="button"
-              disabled={busy || !branches.some(b => b.current && !b.isRemote) || !branches.some(b => !b.current && !b.isRemote)}
-              onClick={() => { setOpen(false); setFilter(''); onMerge('to'); }}
-              className="flex items-center justify-center gap-1 px-1 py-2 rounded whitespace-nowrap text-xs text-accent hover:bg-accent/10 disabled:opacity-40">
-              <GitMerge size={13} className="shrink-0" />Merge To…
             </button>
             <button type="button" disabled={busy}
               aria-label="Clean up merged branches…" title="Clean up merged branches…"

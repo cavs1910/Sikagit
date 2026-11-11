@@ -11,27 +11,50 @@ only the bookmark, preserving files on disk. Desktop uses the same controls.
 The workspace tab bar contains **Show reflog** for History & Changes and the
 matching **Show Git-ignored files** switch for Files. On mobile, the visible labels are shortened to **Git**, **Reflog** and **Ignored** while their accessible names remain complete.
 
-The branch picker groups **Merge…**, **Merge To…** and **Clean up…** in a single compact footer row. Clean up retains its full accessible label and tooltip, **Clean up merged branches…**. The branch list scrolls independently; the actions stay visible. **Merge…** brings another local branch
-into the current branch. **Merge To…** selects a different local destination
-(preferring `main` or `master`), previews current → destination and switches there
-before merging. It requires a clean working tree and checks that the source is
-still active under the repository mutex. It stays on the destination on success,
-conflict or merge failure; abort also leaves the destination checked out. The
-source is kept unless **Delete source branch after merge** is explicitly enabled
-and the merge succeeds. Neither action pushes.
+The branch picker has one **Merge…** entry, beside **Clean up…** in a compact
+footer. Clean up retains its full accessible label and tooltip,
+**Clean up merged branches…**. The branch list scrolls independently; actions
+stay visible. Detached HEAD and fewer than two local branches disable Merge.
 
-Both dialogs use the shared **Allow fast-forward** switch, enabled by default.
-It explicitly passes `--ff`: use fast-forward when the destination is an
-ancestor of the source; otherwise perform an ordinary merge commit. It is not
-FF-only. Disabling the switch passes `--no-ff`, creating a merge commit even
-when fast-forward would be possible (already-merged histories remain a no-op).
-Both choices override the repository’s `merge.ff` setting for this operation.
-Omitting the API field keeps fast-forward enabled; non-boolean values are
-rejected before switching or merging. **Delete source branch after merge** is
-also a switch and remains off by default. Both switches are disabled while busy
-or resolving conflicts. The dialog body scrolls in short viewports while its
-header and action footer stay reachable. Detached HEAD and repositories
-without another local branch disable **Merge To…**.
+The unified **Merge branches** dialog has a **From** source card above an
+**Into** destination card. Both selectors contain local branches only, including
+the current branch, and display each selected commit. Any two distinct local
+branches can be merged; neither has to be the active branch. By default, a
+feature branch merges into main/master when available. When main/master is
+active, another local branch is the source and the current branch is the
+destination. History/context-menu preselection keeps that branch as source.
+
+The central arrow button reverses direction. Drag either card's grip onto the
+other card to do the same with mouse, pen or touch. Releasing outside the other
+card or cancelling a touch gesture leaves the selection unchanged. Keyboard
+users can activate the central button or press Enter/Space on a grip (ArrowDown
+on the source grip and ArrowUp on the destination grip also swap). Selecting a
+branch already used on the other card swaps the pair, keeping the two branches
+distinct. Selection, swapping, dragging and command review never execute Git.
+
+**Allow fast-forward** uses the shared switch, enabled by default: `--ff` uses
+fast-forward when possible and an ordinary merge commit otherwise. Disabling it
+uses `--no-ff`, creating a merge commit even when FF is possible (already-merged
+histories remain a no-op). This is not FF-only and overrides `merge.ff` for the
+operation. **Delete source branch after merge** stays off by default and resets
+to off whenever the source changes. It deletes the reviewed source tip only
+after success, never forces deletion, and keeps remote branches.
+
+Only the **Merge** button submits the operation. `/git/merge-branches` binds the
+request to the reviewed active branch, source commit and destination commit.
+Under the repository mutex, the server rejects stale refs, invalid/nonlocal or
+equal branches, detached/unborn HEAD, dirty/partially staged work and an existing
+merge before switching or modifying files. It switches to the destination only
+when needed and merges the fully qualified local source ref, avoiding same-name
+tag ambiguity. It stays on the destination after success, conflicts or a
+non-conflict merge failure; abort also stays there and closes the dialog. No
+push occurs. The older `/merge` and `/merge-to` endpoints remain compatible;
+the UI uses only the unified endpoint.
+
+Controls and grips are disabled while merging or resolving conflicts. The
+command disclosure follows the selected direction, omits an unnecessary switch
+when the destination is current, and changes to `git merge --abort` on conflicts.
+The body scrolls in short viewports while the header and footer remain reachable.
 
 Each branch row also has a trash button with an explicit local/remote label and
 a confirmation dialog. Deleting a local branch keeps its remote counterpart;
@@ -116,11 +139,11 @@ including delayed/out-of-order replies, and checks cache misses, A → B → A,
 status/branches/tags/history isolation, commit file selection, pending staging,
 both switches, mobile header and confirmed bookmark removal at 320/390/1280px.
 
-`node tests/merge-to.browser.cjs` uses the same browser settings and mocks all
+`node tests/merge-to.browser.cjs` retains its original filename and now exercises the unified dialog. It uses the same browser settings and mocks all
 Git/API operations. It checks both merge directions, destination filtering,
 confirmation and busy controls, optional source deletion, conflicts/abort,
 errors, mobile overflow and the desktop Explorer divider at those widths.
-The production-image suite additionally exercises Merge To against disposable
+The production-image suite additionally exercises the legacy Merge To endpoint against disposable
 Git repositories, including dirty/stale requests and non-conflict failures.
 
 `node tests/branch-delete.browser.cjs` uses the same browser settings and mocked
@@ -178,7 +201,7 @@ the same 35 baseline diagnostics.
 
 ## Optional Git command review
 
-**Show Git commands** is a collapsed-by-default disclosure in Merge, Merge To,
+**Show Git commands** is a collapsed-by-default disclosure in the unified Merge dialog,
 local/remote branch deletion and merged-branch cleanup. The shared
 `GitCommandPreview` uses native details/summary so reviewing operations adds
 space only when requested. Long commands wrap and scroll inside the dialog.
@@ -186,7 +209,7 @@ Opening the disclosure, using Enter on its summary, retrying a preview, or
 changing an option never confirms the merge or deletion.
 
 Merge previews update immediately with the selected branch, `--ff`/`--no-ff`,
-and optional source deletion. Merge To shows the preceding
+and optional source deletion. A different destination shows the preceding
 `git switch --no-guess`; source deletion is labelled as conditional on a
 successful merge. After conflicts, the preview changes to `git merge --abort`,
 matching the available action. Local deletion switches between `-d` and `-D`
@@ -220,3 +243,14 @@ including keyboard review, dynamic options, conditional deletion, conflict
 abort, preview retry and zero mutation before explicit confirmation. Backend
 TypeScript and Vite compile; strict frontend TypeScript keeps the identical
 35 baseline diagnostics.
+
+Validation of unified merging on 2026-11-11: all 82 production-image security
+cases pass, including arbitrary local pairs, a current destination, same-name
+tags, FF/no-FF, stale active/source/destination, partial staging, conflicting and
+unrelated histories, worktree protection, abort and competing requests. The
+test container now uses Docker `--init` to reap short-lived Git helper children
+throughout the longer suite; its 160-PID limit and other runtime restrictions
+remain in force. Backend TypeScript and Vite compile; strict frontend TypeScript
+retains the same 35 baseline diagnostics. Browser fixtures pass at 320, 390 and
+1280 px, with real mouse/touch pointer gestures, cancelled drags, keyboard
+swapping, previews, source-deletion reset, guarded payloads and short viewports.
