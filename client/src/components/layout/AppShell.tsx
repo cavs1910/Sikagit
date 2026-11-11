@@ -2,6 +2,7 @@ import '../../lib/repoSelection';
 import { RepositoryHeader } from './RepositoryHeader';
 import { Menu, X } from 'lucide-react';
 import { useMobile } from '../../hooks/useMobile';
+import { useViewportHeight } from '../../hooks/useViewportHeight';
 import { useRepoStore } from '../../store/repoStore';
 import { EditorDraftGuard } from '../files/EditorDraftGuard';
 import { refreshAISettings } from '../../lib/aiSettings';
@@ -19,6 +20,7 @@ export function AppShell() {
   const { sidebarOpen, sidebarWidth, setSidebarWidth, fontSize, demoMode } = useUIStore();
 
   const mobile = useMobile();
+  useViewportHeight(mobile);
   const [menuOpen, setMenuOpen] = useState(false);
   const activeRepoId = useRepoStore(s => s.activeRepoId);
   const repo = useRepoStore(s => s.repos.find(r => r.id === s.activeRepoId));
@@ -61,7 +63,7 @@ export function AppShell() {
         <button aria-label="Close repositories" className="fixed inset-0 top-12 bg-black/60 z-30" onClick={() => setMenuOpen(false)} />
         <div id="mobile-repositories" className="fixed top-12 bottom-0 left-0 w-[min(85vw,320px)] z-40"><Sidebar onNavigate={() => setMenuOpen(false)} /></div>
       </>}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {!mobile && sidebarOpen && (
           <>
             <div style={{ width: sidebarWidth }} className="flex-shrink-0">

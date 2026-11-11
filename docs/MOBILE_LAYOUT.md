@@ -9,7 +9,7 @@ name, branch selector and repository Settings button. Long names truncate.
 **Remove repository** is inside Settings and requires confirmation; it removes
 only the bookmark, preserving files on disk. Desktop uses the same controls.
 The workspace tab bar contains **Show reflog** for History & Changes and the
-matching **Show Git-ignored files** switch for Files.
+matching **Show Git-ignored files** switch for Files. On mobile, the visible labels are shortened to **Git**, **Reflog** and **Ignored** while their accessible names remain complete.
 
 The branch picker keeps **Merge…** and **Merge To…** buttons in its footer while
 the branch list scrolls independently. **Merge…** brings another local branch
@@ -125,3 +125,24 @@ confirmation/cancellation, stale previews, busy state and partial results with
 mocked APIs at 320/390/1280px. Isolated Git cases cover ancestry versus squash and
 cherry-picks, worktrees, stale and forged plans, expiry/bounds, published-base
 checks, leases and partial failure without real networking.
+
+## File editor space and scrolling
+
+File tabs and the current file's actions share a single 42 px row on mobile
+(36 px on desktop). Save stays visible; text size, word wrap, search and the
+remaining commands live in the grouped **Editor actions** menu. Desktop also
+has a search button. Filenames have full-path tooltips, avoiding a second row
+that repeats the active name.
+
+When a mobile file opens, the repository actions and workspace tabs scroll
+above the editor, leaving the repository header and file toolbar visible.
+Scroll back toward the top to use those controls. The code area keeps its own
+vertical/horizontal scrolling. **Expand editor** gives the file the full
+viewport and has a visible exit control; Esc also exits after any open search
+panel or menu is closed. Neither expansion nor a preference change remounts
+CodeMirror or discards its undo history.
+
+The mobile shell observes `visualViewport` resize events, including when a
+software keyboard changes only the visible height. The expanded editor uses
+the same height. Search fields use a 16 px mobile font and the native search
+panel can scroll when its controls exceed the available height.

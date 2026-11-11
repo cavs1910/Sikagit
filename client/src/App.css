@@ -137,13 +137,57 @@ body {
 /* Keep the application inside the visible viewport as mobile browser chrome
    and the software keyboard change its height. Desktop panel sizes stay saved. */
 .app-shell {
+  height: var(--app-viewport-height, 100dvh);
   padding-bottom: env(safe-area-inset-bottom);
+}
+.editor-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  align-self: center;
+  flex-shrink: 0;
+  border-radius: 4px;
+  color: var(--color-text-secondary);
+}
+.editor-tabbar { height: 36px; }
+.editor-icon-button:hover {
+  color: var(--color-text-primary);
+  background: var(--color-bg-tertiary);
+}
+.editor-icon-button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.editor-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  height: var(--app-viewport-height, 100dvh);
+  padding-bottom: env(safe-area-inset-bottom);
+  background: var(--color-bg-primary);
 }
 .app-dialog {
   max-width: calc(100vw - 1.5rem);
 }
 
 @media (max-width: 767px) {
+  /* The repo actions and workspace tabs can scroll away, leaving the file
+     toolbar and a full-height editor below the persistent repository header. */
+  .mobile-files-scroll {
+    overflow-y: auto;
+    scroll-padding-top: 0;
+  }
+  .mobile-files-scroll > .files-workspace-host {
+    flex: 0 0 calc(var(--app-viewport-height, 100dvh) - 4.5rem - env(safe-area-inset-bottom));
+  }
+  .editor-icon-button { width: 36px; height: 36px; }
+  .editor-tabbar { height: 42px; }
+  .editor-save-button { min-width: 36px; }
+  .editor-tabbar [aria-label='Find and replace'] { display: none; }
+  .code-editor .cm-panels { max-height: 45%; overflow-y: auto; }
+  .code-editor .cm-search input { max-width: calc(100% - 2rem); font-size: 16px; }
   .repo-toolbar {
     height: auto;
     min-height: 2.75rem;

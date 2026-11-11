@@ -15,6 +15,8 @@ import {
   AlertTriangle,
   Loader2,
   Copy,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { api, type DirectoryEntry } from "../../lib/api";
 import { useEditorStore, isDirty } from "../../store/editorStore";
@@ -165,6 +167,7 @@ export function FilesWorkspace({
   const explorerWidth = useUIStore(s => s.explorerWidth);
   const setExplorerWidth = useUIStore(s => s.setExplorerWidth);
   const explorerRef = useRef<HTMLElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const handleExplorerResize = useCallback((delta: number) => {
     if (explorerRef.current) {
       setExplorerWidth(explorerRef.current.getBoundingClientRect().width + delta);
@@ -173,8 +176,26 @@ export function FilesWorkspace({
   const [refresh, setRefresh] = useState(0),
     [filter, setFilter] = useState(""),
     [showTree, setShowTree] = useState(true);
+  const [toolbarContainer, setToolbarContainer] = useState<HTMLDivElement | null>(null);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!visible || !key) setFocused(false);
+  }, [visible, key]);
+  useEffect(() => {
+    if (!focused) return;
+    const exit = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented && !useConfirmStore.getState().options) setFocused(false);
+    };
+    window.addEventListener("keydown", exit);
+    return () => window.removeEventListener("keydown", exit);
+  }, [focused]);
   const treeVisible = showTree || (mobile && !doc);
   useEffect(() => { if (mobile && visible) setShowTree(!key); }, [mobile, key, visible]);
+  useEffect(() => {
+    if (!mobile || !visible || !key || treeVisible) return;
+    const scroll = workspaceRef.current?.closest('.mobile-files-scroll');
+    if (scroll) scroll.scrollTop = scroll.scrollHeight;
+  }, [mobile, visible, key, treeVisible]);
   const confirm = useConfirmStore((s) => s.confirm),
     toast = useToastStore((s) => s.addToast);
   const saveCurrent = useCallback(async () => {
@@ -235,7 +256,22 @@ export function FilesWorkspace({
     close(tabKey);
   };
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden">
+    <div
+      ref={workspaceRef}
+      role={focused ? "dialog" : undefined}
+      aria-modal={focused ? true : undefined}
+      aria-label={focused ? "Expanded file editor" : undefined}
+      className={cn("files-workspace flex flex-1 min-h-0 overflow-hidden", focused && "editor-expanded")}
+      onKeyDown={(event) => {
+        if (!focused || event.key !== 'Tab' || event.defaultPrevented || !event.currentTarget.contains(event.target as Node)) return;
+        const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+          'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        )).filter((item) => item.getClientRects().length > 0);
+        const next = event.shiftKey && event.target === items[0] ? items.at(-1)
+          : !event.shiftKey && event.target === items.at(-1) ? items[0] : null;
+        if (next) { event.preventDefault(); next.focus(); }
+      }}
+    >
       <aside
         ref={explorerRef}
         style={{ width: mobile ? undefined : explorerWidth }}
@@ -281,17 +317,17 @@ export function FilesWorkspace({
       {!mobile && treeVisible && (
         <ResizeHandle direction="horizontal" onResize={handleExplorerResize} />
       )}
-      {(!mobile || (!!doc && !treeVisible)) && <section className="flex-1 min-w-0 flex flex-col overflow-hidden">
-        <div className="flex border-b border-border bg-bg-secondary min-h-9 shrink-0">
+      {(!mobile || (!!doc && !treeVisible)) && <section aria-label="File editor workspace" className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+        <div className="editor-tabbar flex items-stretch border-b border-border bg-bg-secondary min-w-0 shrink-0">
           <button
             title={treeVisible ? "Hide explorer" : "Show explorer"}
             aria-expanded={treeVisible}
             onClick={() => setShowTree((value) => !value)}
-            className="px-2 text-text-muted hover:text-text-primary"
+            className="editor-icon-button shrink-0"
           >
             {treeVisible ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
           </button>
-          <div className="flex flex-1 min-w-0 overflow-x-auto">
+          <div aria-label="Open files" className="flex flex-1 min-w-0 overflow-x-auto">
             {tabs.map(([tabKey, item]) => (
               <div
                 key={tabKey}
@@ -305,7 +341,7 @@ export function FilesWorkspace({
                 <button
                   title={item.file}
                   onClick={() => void open(repoPath, item.file)}
-                  className="px-3 py-2"
+                  className="px-2 py-2 max-w-36 md:max-w-56 truncate"
                 >
                   {isDirty(item) && <span className="text-accent mr-1">●</span>}
                   {item.file.split("/").pop()}
@@ -314,12 +350,41 @@ export function FilesWorkspace({
                   aria-label={"Close " + item.file}
                   disabled={item.saving || item.loading}
                   onClick={() => void closeTab(tabKey)}
-                  className="mr-2 disabled:opacity-30"
+                  className="px-1 mr-1 disabled:opacity-30"
                 >
                   <X size={12} />
                 </button>
               </div>
             ))}
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5 px-1 border-l border-border">
+            {doc && <button
+              title="Save file (Cmd/Ctrl+S)"
+              aria-label="Save"
+              onClick={() => void saveCurrent()}
+              disabled={!doc.loaded || !isDirty(doc) || doc.saving || doc.loading || doc.external}
+              className="editor-save-button flex items-center justify-center gap-1.5 h-8 px-2 rounded text-xs text-accent hover:bg-accent/10 disabled:text-text-muted disabled:opacity-50 disabled:hover:bg-transparent"
+            >
+              {doc.saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              <span className="hidden md:inline">Save</span>
+            </button>}
+            {doc && <button
+              aria-label={focused ? "Exit expanded editor" : "Expand editor"}
+              title={focused ? "Exit expanded editor (Esc)" : "Expand editor"}
+              aria-pressed={focused}
+              onClick={() => setFocused((value) => !value)}
+              className="editor-icon-button"
+            >
+              {focused ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </button>}
+            {doc && (!doc.loaded || doc.loading) && <button
+              title="Reload from server"
+              aria-label="Reload from server"
+              disabled={doc.loading || doc.saving}
+              onClick={() => void reloadCurrent()}
+              className="editor-icon-button disabled:opacity-30"
+            ><RefreshCw size={14} /></button>}
+            <div ref={setToolbarContainer} />
           </div>
         </div>
         {!doc ? (
@@ -332,37 +397,6 @@ export function FilesWorkspace({
           </div>
         ) : (
           <>
-            <div className="flex items-center gap-2 px-3 py-2 border-b border-border text-xs shrink-0">
-              <span title={doc.file} className="truncate flex-1 font-mono">
-                {doc.file}
-              </span>
-              <button
-                title="Reload from server"
-                disabled={doc.loading || doc.saving}
-                onClick={() => void reloadCurrent()}
-                className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30"
-              >
-                <RefreshCw size={14} />
-              </button>
-              <button
-                onClick={() => void saveCurrent()}
-                disabled={
-                  !doc.loaded ||
-                  !isDirty(doc) ||
-                  doc.saving ||
-                  doc.loading ||
-                  doc.external
-                }
-                className="flex items-center gap-1.5 px-3 py-1 rounded bg-accent-emphasis text-white disabled:opacity-40"
-              >
-                {doc.saving ? (
-                  <Loader2 size={13} className="animate-spin" />
-                ) : (
-                  <Save size={13} />
-                )}
-                Save
-              </button>
-            </div>
             {doc.external && (
               <div
                 role="alert"
@@ -422,6 +456,8 @@ export function FilesWorkspace({
                   documentKey={key}
                   doc={doc}
                   onSave={() => void saveCurrent()}
+                  toolbarContainer={toolbarContainer}
+                  onReload={() => void reloadCurrent()}
                 />
               </Suspense>
             ) : (
@@ -439,7 +475,7 @@ export function FilesWorkspace({
                       : "Saved"
                   : "Read unavailable"}
               </span>
-              <span>UTF-8 · {doc.lineEnding.toUpperCase()} · Cmd/Ctrl+S</span>
+              <span>UTF-8 · {doc.lineEnding.toUpperCase()}<span className="hidden md:inline"> · Cmd/Ctrl+S</span></span>
             </div>
           </>
         )}

@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { basicSetup, EditorView } from "codemirror";
 import { EditorState, Compartment } from "@codemirror/state";
 import { keymap } from "@codemirror/view";
@@ -55,10 +56,14 @@ export default function CodeEditor({
   documentKey,
   doc,
   onSave,
+  toolbarContainer,
+  onReload,
 }: {
   documentKey: string;
   doc: EditorDocument;
   onSave: () => void;
+  toolbarContainer: HTMLElement | null;
+  onReload: () => void;
 }) {
   const parent = useRef<HTMLDivElement>(null),
     view = useRef<EditorView | null>(null),
@@ -77,10 +82,12 @@ export default function CodeEditor({
         doc: doc.content,
         extensions: [
           basicSetup,
-          display.current.of(appearance(
-            useUIStore.getState().editorFontSize,
-            useUIStore.getState().editorWordWrap,
-          )),
+          display.current.of(
+            appearance(
+              useUIStore.getState().editorFontSize,
+              useUIStore.getState().editorWordWrap,
+            ),
+          ),
           EditorState.lineSeparator.of(
             doc.lineEnding === "crlf" ? "\r\n" : "\n",
           ),
@@ -164,14 +171,21 @@ export default function CodeEditor({
   }, [fontSize, wordWrap]);
   return (
     <>
-      <EditorToolbar onCommand={(command) => {
-        const editor = view.current;
-        if (editor) {
-          editor.focus();
-          command(editor);
-        }
-      }} />
-      <div ref={parent} className="flex-1 min-h-0 overflow-hidden" />
+      {toolbarContainer && createPortal(
+        <EditorToolbar
+          onReload={onReload}
+          canReload={!doc.loading && !doc.saving}
+          onCommand={(command) => {
+            const editor = view.current;
+            if (editor) {
+              editor.focus();
+              command(editor);
+            }
+          }}
+        />,
+        toolbarContainer,
+      )}
+      <div ref={parent} className="code-editor flex-1 min-h-0 overflow-hidden" />
     </>
   );
 }

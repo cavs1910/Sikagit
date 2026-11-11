@@ -285,7 +285,7 @@ export function MainContent() {
 
   return (
     <EditorNavigation.Provider value={openInEditor}>
-    <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+    <div className={cn("repository-content flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden", mobile && workspaceTab === "files" && "mobile-files-scroll")}>
       {/* Toolbar */}
       <div className="repo-toolbar group h-10 bg-bg-secondary border-b border-border flex items-center px-3 gap-2">
         {!mobile && repoProject && (
@@ -371,14 +371,14 @@ export function MainContent() {
 
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-1 border-b border-border bg-bg-secondary shrink-0">
+      <div className="workspace-tabs flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-1 border-b border-border bg-bg-secondary shrink-0">
         <div className="flex gap-1" role="tablist" aria-label="Repository workspace">
-          <button role="tab" aria-selected={workspaceTab==='git'} onClick={()=>setWorkspaceTab('git')} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='git'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>History &amp; Changes</button>
+          <button role="tab" aria-label="History & Changes" aria-selected={workspaceTab==='git'} onClick={()=>setWorkspaceTab('git')} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='git'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}><span className="hidden md:inline">History &amp; Changes</span><span className="md:hidden">Git</span></button>
           <button role="tab" aria-selected={workspaceTab==='files'} onClick={()=>{setFilesOpened(true);setWorkspaceTab('files');}} className={cn('px-3 py-1 text-xs rounded',workspaceTab==='files'?'bg-accent/10 text-accent':'text-text-secondary hover:bg-bg-tertiary')}>Files</button>
         </div>
         {workspaceTab === 'git'
-          ? <ToolbarSwitch label="Show reflog" title="Include commits recoverable from the reflog" checked={showReflog} onChange={setShowReflog} />
-          : <ToolbarSwitch label="Show Git-ignored files" title="Include files ignored by Git" checked={showIgnoredFiles} onChange={setShowIgnoredFiles} />}
+          ? <ToolbarSwitch label="Show reflog" shortLabel="Reflog" title="Include commits recoverable from the reflog" checked={showReflog} onChange={setShowReflog} />
+          : <ToolbarSwitch label="Show Git-ignored files" shortLabel="Ignored" title="Include files ignored by Git" checked={showIgnoredFiles} onChange={setShowIgnoredFiles} />}
       </div>
       {mobile && workspaceTab === 'git' && <nav className="flex shrink-0 gap-2 p-2 border-b border-border" aria-label="Git views">
         {(['history', 'changes'] as const).map(tab => <button key={tab} aria-pressed={mobileTab === tab && !selectedCommit && !selectedFile} className={cn('px-3 py-2 rounded text-xs', mobileTab === tab && !selectedCommit && !selectedFile ? 'bg-accent/10 text-accent' : 'bg-bg-secondary text-text-secondary')} onClick={() => { selectCommit(null); selectFile(null); setMobileTab(tab); }}>{tab === 'history' ? 'History' : 'Changes'}</button>)}
@@ -474,7 +474,7 @@ export function MainContent() {
         )}
       </div>
 
-      {filesOpened && <div className={cn('flex-1 min-h-0 overflow-hidden',workspaceTab==='files'?'flex':'hidden')}><Suspense fallback={<div className="p-4 text-xs text-text-muted">Loading files…</div>}><FilesWorkspace key={repo.path} repoPath={repo.path} visible={workspaceTab==='files'}/></Suspense></div>}
+      {filesOpened && <div className={cn('files-workspace-host flex-1 min-h-0 overflow-hidden',workspaceTab==='files'?'flex':'hidden')}><Suspense fallback={<div className="p-4 text-xs text-text-muted">Loading files…</div>}><FilesWorkspace key={repo.path} repoPath={repo.path} visible={workspaceTab==='files'}/></Suspense></div>}
 
       {/* Merge dialog */}
       {showMergeDialog && repo && (
